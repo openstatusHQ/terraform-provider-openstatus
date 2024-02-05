@@ -1,0 +1,2157 @@
+{
+   "openapi":"3.0.0",
+   "info":{
+      "version":"1.0.0",
+      "title":"OpenStatus API"
+   },
+   "components":{
+      "schemas":{
+
+      },
+      "parameters":{
+
+      }
+   },
+   "paths":{
+      "/monitor/":{
+         "get":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Get all monitors",
+            "responses":{
+               "200":{
+                  "description":"All the monitors",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"array",
+                           "items":{
+                              "type":"object",
+                              "properties":{
+                                 "id":{
+                                    "type":"number",
+                                    "description":"The id of the monitor",
+                                    "example":123
+                                 },
+                                 "periodicity":{
+                                    "type":"string",
+                                    "enum":[
+                                       "30s",
+                                       "1m",
+                                       "5m",
+                                       "10m",
+                                       "30m",
+                                       "1h",
+                                       "other"
+                                    ],
+                                    "description":"How often the monitor should run",
+                                    "example":"1m"
+                                 },
+                                 "url":{
+                                    "type":"string",
+                                    "format":"uri",
+                                    "description":"The url to monitor",
+                                    "example":"https://www.documenso.co"
+                                 },
+                                 "regions":{
+                                    "type":"array",
+                                    "items":{
+                                       "type":"string",
+                                       "enum":[
+                                          "ams",
+                                          "iad",
+                                          "hkg",
+                                          "jnb",
+                                          "syd",
+                                          "gru"
+                                       ]
+                                    },
+                                    "default":[
+
+                                    ],
+                                    "description":"The regions to use",
+                                    "example":[
+                                       "ams"
+                                    ]
+                                 },
+                                 "name":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "description":"The name of the monitor",
+                                    "example":"Documenso"
+                                 },
+                                 "description":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "description":"The description of your monitor",
+                                    "example":"Documenso website"
+                                 },
+                                 "method":{
+                                    "type":"string",
+                                    "enum":[
+                                       "GET",
+                                       "POST",
+                                       "HEAD"
+                                    ],
+                                    "default":"GET",
+                                    "example":"GET"
+                                 },
+                                 "body":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "default":"",
+                                    "description":"The body",
+                                    "example":"Hello World"
+                                 },
+                                 "headers":{
+                                    "type":"array",
+                                    "items":{
+                                       "type":"object",
+                                       "properties":{
+                                          "key":{
+                                             "type":"string"
+                                          },
+                                          "value":{
+                                             "type":"string"
+                                          }
+                                       },
+                                       "required":[
+                                          "key",
+                                          "value"
+                                       ]
+                                    },
+                                    "default":[
+
+                                    ],
+                                    "description":"The headers of your request",
+                                    "example":[
+                                       {
+                                          "key":"x-apikey",
+                                          "value":"supersecrettoken"
+                                       }
+                                    ]
+                                 },
+                                 "active":{
+                                    "type":"boolean",
+                                    "default":false,
+                                    "description":"If the monitor is active"
+                                 }
+                              },
+                              "required":[
+                                 "periodicity",
+                                 "url",
+                                 "regions",
+                                 "method"
+                              ],
+                              "description":"The monitor"
+                           }
+                        }
+                     }
+                  }
+               },
+               "401":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "404":{
+                  "description":"Not found",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "post":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Create a monitor",
+            "requestBody":{
+               "description":"The monitor to create",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "periodicity":{
+                              "type":"string",
+                              "enum":[
+                                 "30s",
+                                 "1m",
+                                 "5m",
+                                 "10m",
+                                 "30m",
+                                 "1h",
+                                 "other"
+                              ],
+                              "description":"How often the monitor should run",
+                              "example":"1m"
+                           },
+                           "url":{
+                              "type":"string",
+                              "format":"uri",
+                              "description":"The url to monitor",
+                              "example":"https://www.documenso.co"
+                           },
+                           "regions":{
+                              "type":"array",
+                              "items":{
+                                 "type":"string",
+                                 "enum":[
+                                    "ams",
+                                    "iad",
+                                    "hkg",
+                                    "jnb",
+                                    "syd",
+                                    "gru"
+                                 ]
+                              },
+                              "description":"The regions to use",
+                              "example":"ams"
+                           },
+                           "name":{
+                              "type":"string",
+                              "description":"The name of the monitor",
+                              "example":"Documenso"
+                           },
+                           "description":{
+                              "type":"string",
+                              "description":"The description of your monitor",
+                              "example":"Documenso website"
+                           },
+                           "method":{
+                              "type":"string",
+                              "enum":[
+                                 "GET",
+                                 "POST",
+                                 "HEAD"
+                              ],
+                              "default":"GET",
+                              "example":"GET"
+                           },
+                           "body":{
+                              "type":"string",
+                              "description":"The body",
+                              "example":"Hello World"
+                           },
+                           "active":{
+                              "type":"boolean",
+                              "default":false,
+                              "description":"If the monitor is active"
+                           },
+                           "headers":{
+                              "type":"array",
+                              "nullable":true,
+                              "items":{
+                                 "type":"object",
+                                 "properties":{
+                                    "key":{
+                                       "type":"string"
+                                    },
+                                    "value":{
+                                       "type":"string"
+                                    }
+                                 },
+                                 "required":[
+                                    "key",
+                                    "value"
+                                 ]
+                              },
+                              "default":[
+
+                              ],
+                              "description":"The headers of your request",
+                              "example":[
+                                 {
+                                    "key":"x-apikey",
+                                    "value":"supersecrettoken"
+                                 }
+                              ]
+                           }
+                        },
+                        "required":[
+                           "periodicity",
+                           "url",
+                           "regions",
+                           "method"
+                        ]
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Create a monitor",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the monitor",
+                                 "example":123
+                              },
+                              "periodicity":{
+                                 "type":"string",
+                                 "enum":[
+                                    "30s",
+                                    "1m",
+                                    "5m",
+                                    "10m",
+                                    "30m",
+                                    "1h",
+                                    "other"
+                                 ],
+                                 "description":"How often the monitor should run",
+                                 "example":"1m"
+                              },
+                              "url":{
+                                 "type":"string",
+                                 "format":"uri",
+                                 "description":"The url to monitor",
+                                 "example":"https://www.documenso.co"
+                              },
+                              "regions":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"string",
+                                    "enum":[
+                                       "ams",
+                                       "iad",
+                                       "hkg",
+                                       "jnb",
+                                       "syd",
+                                       "gru"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The regions to use",
+                                 "example":[
+                                    "ams"
+                                 ]
+                              },
+                              "name":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The name of the monitor",
+                                 "example":"Documenso"
+                              },
+                              "description":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The description of your monitor",
+                                 "example":"Documenso website"
+                              },
+                              "method":{
+                                 "type":"string",
+                                 "enum":[
+                                    "GET",
+                                    "POST",
+                                    "HEAD"
+                                 ],
+                                 "default":"GET",
+                                 "example":"GET"
+                              },
+                              "body":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "default":"",
+                                 "description":"The body",
+                                 "example":"Hello World"
+                              },
+                              "headers":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"object",
+                                    "properties":{
+                                       "key":{
+                                          "type":"string"
+                                       },
+                                       "value":{
+                                          "type":"string"
+                                       }
+                                    },
+                                    "required":[
+                                       "key",
+                                       "value"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The headers of your request",
+                                 "example":[
+                                    {
+                                       "key":"x-apikey",
+                                       "value":"supersecrettoken"
+                                    }
+                                 ]
+                              },
+                              "active":{
+                                 "type":"boolean",
+                                 "default":false,
+                                 "description":"If the monitor is active"
+                              }
+                           },
+                           "required":[
+                              "periodicity",
+                              "url",
+                              "regions",
+                              "method"
+                           ],
+                           "description":"The monitor"
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "403":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/monitor/:id":{
+         "get":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Get a monitor",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the monitor",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"The monitor",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the monitor",
+                                 "example":123
+                              },
+                              "periodicity":{
+                                 "type":"string",
+                                 "enum":[
+                                    "30s",
+                                    "1m",
+                                    "5m",
+                                    "10m",
+                                    "30m",
+                                    "1h",
+                                    "other"
+                                 ],
+                                 "description":"How often the monitor should run",
+                                 "example":"1m"
+                              },
+                              "url":{
+                                 "type":"string",
+                                 "format":"uri",
+                                 "description":"The url to monitor",
+                                 "example":"https://www.documenso.co"
+                              },
+                              "regions":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"string",
+                                    "enum":[
+                                       "ams",
+                                       "iad",
+                                       "hkg",
+                                       "jnb",
+                                       "syd",
+                                       "gru"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The regions to use",
+                                 "example":[
+                                    "ams"
+                                 ]
+                              },
+                              "name":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The name of the monitor",
+                                 "example":"Documenso"
+                              },
+                              "description":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The description of your monitor",
+                                 "example":"Documenso website"
+                              },
+                              "method":{
+                                 "type":"string",
+                                 "enum":[
+                                    "GET",
+                                    "POST",
+                                    "HEAD"
+                                 ],
+                                 "default":"GET",
+                                 "example":"GET"
+                              },
+                              "body":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "default":"",
+                                 "description":"The body",
+                                 "example":"Hello World"
+                              },
+                              "headers":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"object",
+                                    "properties":{
+                                       "key":{
+                                          "type":"string"
+                                       },
+                                       "value":{
+                                          "type":"string"
+                                       }
+                                    },
+                                    "required":[
+                                       "key",
+                                       "value"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The headers of your request",
+                                 "example":[
+                                    {
+                                       "key":"x-apikey",
+                                       "value":"supersecrettoken"
+                                    }
+                                 ]
+                              },
+                              "active":{
+                                 "type":"boolean",
+                                 "default":false,
+                                 "description":"If the monitor is active"
+                              }
+                           },
+                           "required":[
+                              "periodicity",
+                              "url",
+                              "regions",
+                              "method"
+                           ],
+                           "description":"The monitor"
+                        }
+                     }
+                  }
+               },
+               "401":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "404":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "put":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Update a monitor",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the monitor",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "requestBody":{
+               "description":"The monitor to update",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "periodicity":{
+                              "type":"string",
+                              "enum":[
+                                 "30s",
+                                 "1m",
+                                 "5m",
+                                 "10m",
+                                 "30m",
+                                 "1h",
+                                 "other"
+                              ],
+                              "description":"How often the monitor should run",
+                              "example":"1m"
+                           },
+                           "url":{
+                              "type":"string",
+                              "format":"uri",
+                              "description":"The url to monitor",
+                              "example":"https://www.documenso.co"
+                           },
+                           "regions":{
+                              "type":"array",
+                              "items":{
+                                 "type":"string",
+                                 "enum":[
+                                    "ams",
+                                    "iad",
+                                    "hkg",
+                                    "jnb",
+                                    "syd",
+                                    "gru"
+                                 ]
+                              },
+                              "description":"The regions to use",
+                              "example":"ams"
+                           },
+                           "name":{
+                              "type":"string",
+                              "description":"The name of the monitor",
+                              "example":"Documenso"
+                           },
+                           "description":{
+                              "type":"string",
+                              "description":"The description of your monitor",
+                              "example":"Documenso website"
+                           },
+                           "method":{
+                              "type":"string",
+                              "enum":[
+                                 "GET",
+                                 "POST",
+                                 "HEAD"
+                              ],
+                              "default":"GET",
+                              "example":"GET"
+                           },
+                           "body":{
+                              "type":"string",
+                              "description":"The body",
+                              "example":"Hello World"
+                           },
+                           "active":{
+                              "type":"boolean",
+                              "default":false,
+                              "description":"If the monitor is active"
+                           },
+                           "headers":{
+                              "type":"array",
+                              "nullable":true,
+                              "items":{
+                                 "type":"object",
+                                 "properties":{
+                                    "key":{
+                                       "type":"string"
+                                    },
+                                    "value":{
+                                       "type":"string"
+                                    }
+                                 },
+                                 "required":[
+                                    "key",
+                                    "value"
+                                 ]
+                              },
+                              "default":[
+
+                              ],
+                              "description":"The headers of your request",
+                              "example":[
+                                 {
+                                    "key":"x-apikey",
+                                    "value":"supersecrettoken"
+                                 }
+                              ]
+                           }
+                        },
+                        "required":[
+                           "periodicity",
+                           "url",
+                           "regions",
+                           "method"
+                        ]
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Update a monitor",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the monitor",
+                                 "example":123
+                              },
+                              "periodicity":{
+                                 "type":"string",
+                                 "enum":[
+                                    "30s",
+                                    "1m",
+                                    "5m",
+                                    "10m",
+                                    "30m",
+                                    "1h",
+                                    "other"
+                                 ],
+                                 "description":"How often the monitor should run",
+                                 "example":"1m"
+                              },
+                              "url":{
+                                 "type":"string",
+                                 "format":"uri",
+                                 "description":"The url to monitor",
+                                 "example":"https://www.documenso.co"
+                              },
+                              "regions":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"string",
+                                    "enum":[
+                                       "ams",
+                                       "iad",
+                                       "hkg",
+                                       "jnb",
+                                       "syd",
+                                       "gru"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The regions to use",
+                                 "example":[
+                                    "ams"
+                                 ]
+                              },
+                              "name":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The name of the monitor",
+                                 "example":"Documenso"
+                              },
+                              "description":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The description of your monitor",
+                                 "example":"Documenso website"
+                              },
+                              "method":{
+                                 "type":"string",
+                                 "enum":[
+                                    "GET",
+                                    "POST",
+                                    "HEAD"
+                                 ],
+                                 "default":"GET",
+                                 "example":"GET"
+                              },
+                              "body":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "default":"",
+                                 "description":"The body",
+                                 "example":"Hello World"
+                              },
+                              "headers":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"object",
+                                    "properties":{
+                                       "key":{
+                                          "type":"string"
+                                       },
+                                       "value":{
+                                          "type":"string"
+                                       }
+                                    },
+                                    "required":[
+                                       "key",
+                                       "value"
+                                    ]
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The headers of your request",
+                                 "example":[
+                                    {
+                                       "key":"x-apikey",
+                                       "value":"supersecrettoken"
+                                    }
+                                 ]
+                              },
+                              "active":{
+                                 "type":"boolean",
+                                 "default":false,
+                                 "description":"If the monitor is active"
+                              }
+                           },
+                           "required":[
+                              "periodicity",
+                              "url",
+                              "regions",
+                              "method"
+                           ],
+                           "description":"The monitor"
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "delete":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Delete a monitor",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the monitor",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"Delete the monitor",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "message":{
+                                 "type":"string",
+                                 "example":"Deleted"
+                              }
+                           },
+                           "required":[
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/monitor/:id/summary":{
+         "get":{
+            "tags":[
+               "monitor"
+            ],
+            "description":"Get monitor daily summary",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the monitor",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"All the historical metrics",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "data":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"object",
+                                    "properties":{
+                                       "ok":{
+                                          "type":"integer",
+                                          "description":"The number of ok responses"
+                                       },
+                                       "count":{
+                                          "type":"integer",
+                                          "description":"The total number of request"
+                                       },
+                                       "avgLatency":{
+                                          "type":"integer",
+                                          "description":"The average latency"
+                                       },
+                                       "day":{
+                                          "type":"string",
+                                          "description":"the date of the event"
+                                       }
+                                    },
+                                    "required":[
+                                       "ok",
+                                       "count",
+                                       "avgLatency",
+                                       "day"
+                                    ]
+                                 },
+                                 "description":"The daily stats"
+                              }
+                           },
+                           "required":[
+                              "data"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "401":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "404":{
+                  "description":"Not found",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/status_report_update/:id":{
+         "get":{
+            "tags":[
+               "status_report_update"
+            ],
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the update",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"Get all status report updates",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "status":{
+                                 "type":"string",
+                                 "enum":[
+                                    "investigating",
+                                    "identified",
+                                    "monitoring",
+                                    "resolved"
+                                 ],
+                                 "description":"The status of the update"
+                              },
+                              "id":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The id of the update"
+                              },
+                              "date":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date of the update in ISO 8601 format"
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "description":"The message of the update"
+                              }
+                           },
+                           "required":[
+                              "status",
+                              "date",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/status_report_update/":{
+         "post":{
+            "tags":[
+               "status_report_update"
+            ],
+            "requestBody":{
+               "description":"the status report update",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "status_report_id":{
+                              "type":"number",
+                              "description":"The id of the status report"
+                           },
+                           "status":{
+                              "type":"string",
+                              "enum":[
+                                 "investigating",
+                                 "identified",
+                                 "monitoring",
+                                 "resolved"
+                              ],
+                              "description":"The status of the update"
+                           },
+                           "date":{
+                              "type":"string",
+                              "format":"date-time",
+                              "description":"The date of the update in ISO 8601 format"
+                           },
+                           "message":{
+                              "type":"string",
+                              "description":"The message of the update"
+                           }
+                        },
+                        "required":[
+                           "status_report_id",
+                           "status",
+                           "date",
+                           "message"
+                        ]
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Get all status report updates",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "status":{
+                                 "type":"string",
+                                 "enum":[
+                                    "investigating",
+                                    "identified",
+                                    "monitoring",
+                                    "resolved"
+                                 ],
+                                 "description":"The status of the update"
+                              },
+                              "id":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The id of the update"
+                              },
+                              "date":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date of the update in ISO 8601 format"
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "description":"The message of the update"
+                              }
+                           },
+                           "required":[
+                              "status",
+                              "date",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/incident/":{
+         "get":{
+            "tags":[
+               "incident"
+            ],
+            "description":"Get all incidents",
+            "responses":{
+               "200":{
+                  "description":"Get all incidents",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"array",
+                           "items":{
+                              "type":"object",
+                              "properties":{
+                                 "id":{
+                                    "type":"number",
+                                    "description":"The id of the incident",
+                                    "example":1
+                                 },
+                                 "startedAt":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "description":"The date the incident started"
+                                 },
+                                 "monitorId":{
+                                    "type":"number",
+                                    "nullable":true,
+                                    "description":"The id of the monitor associated with the incident",
+                                    "example":1
+                                 },
+                                 "acknowledgedAt":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "description":"The date the incident was acknowledged"
+                                 },
+                                 "acknowledgedBy":{
+                                    "type":"number",
+                                    "nullable":true,
+                                    "description":"The user who acknowledged the incident"
+                                 },
+                                 "resolvedAt":{
+                                    "type":"string",
+                                    "nullable":true,
+                                    "description":"The date the incident was resolved"
+                                 },
+                                 "resolvedBy":{
+                                    "type":"number",
+                                    "nullable":true,
+                                    "description":"The user who resolved the incident"
+                                 }
+                              },
+                              "required":[
+                                 "id",
+                                 "startedAt",
+                                 "monitorId",
+                                 "acknowledgedBy",
+                                 "resolvedBy"
+                              ]
+                           }
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/incident/:id":{
+         "get":{
+            "tags":[
+               "incident"
+            ],
+            "description":"Get an incident",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the Incident",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"Get an incident",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the incident",
+                                 "example":1
+                              },
+                              "startedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident started"
+                              },
+                              "monitorId":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The id of the monitor associated with the incident",
+                                 "example":1
+                              },
+                              "acknowledgedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident was acknowledged"
+                              },
+                              "acknowledgedBy":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The user who acknowledged the incident"
+                              },
+                              "resolvedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident was resolved"
+                              },
+                              "resolvedBy":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The user who resolved the incident"
+                              }
+                           },
+                           "required":[
+                              "id",
+                              "startedAt",
+                              "monitorId",
+                              "acknowledgedBy",
+                              "resolvedBy"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "put":{
+            "tags":[
+               "incident"
+            ],
+            "description":"Update an incident",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the Incident",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "requestBody":{
+               "description":"The incident to update",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "acknowledgedAt":{
+                              "type":"string",
+                              "nullable":true
+                           },
+                           "resolvedAt":{
+                              "type":"string",
+                              "nullable":true
+                           }
+                        },
+                        "description":"The incident to create"
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Update a monitor",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the incident",
+                                 "example":1
+                              },
+                              "startedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident started"
+                              },
+                              "monitorId":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The id of the monitor associated with the incident",
+                                 "example":1
+                              },
+                              "acknowledgedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident was acknowledged"
+                              },
+                              "acknowledgedBy":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The user who acknowledged the incident"
+                              },
+                              "resolvedAt":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date the incident was resolved"
+                              },
+                              "resolvedBy":{
+                                 "type":"number",
+                                 "nullable":true,
+                                 "description":"The user who resolved the incident"
+                              }
+                           },
+                           "required":[
+                              "id",
+                              "startedAt",
+                              "monitorId",
+                              "acknowledgedBy",
+                              "resolvedBy"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/status_report/":{
+         "get":{
+            "tags":[
+               "status_report"
+            ],
+            "description":"Get all status reports",
+            "responses":{
+               "200":{
+                  "description":"Get all status reports",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"array",
+                           "items":{
+                              "type":"object",
+                              "properties":{
+                                 "title":{
+                                    "type":"string",
+                                    "description":"The title of the status report",
+                                    "example":"Documenso"
+                                 },
+                                 "status":{
+                                    "type":"string",
+                                    "enum":[
+                                       "investigating",
+                                       "identified",
+                                       "monitoring",
+                                       "resolved"
+                                    ],
+                                    "description":"The current status of the report"
+                                 },
+                                 "id":{
+                                    "type":"number",
+                                    "description":"The id of the status report"
+                                 },
+                                 "status_report_updates":{
+                                    "type":"array",
+                                    "items":{
+                                       "type":"number"
+                                    },
+                                    "default":[
+
+                                    ],
+                                    "description":"The ids of the status report updates"
+                                 }
+                              },
+                              "required":[
+                                 "title",
+                                 "status",
+                                 "id",
+                                 "status_report_updates"
+                              ]
+                           }
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "post":{
+            "tags":[
+               "status_report"
+            ],
+            "description":"Create an status report",
+            "requestBody":{
+               "description":"The status report to create",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "title":{
+                              "type":"string",
+                              "description":"The title of the status report",
+                              "example":"Documenso"
+                           },
+                           "status":{
+                              "type":"string",
+                              "enum":[
+                                 "investigating",
+                                 "identified",
+                                 "monitoring",
+                                 "resolved"
+                              ],
+                              "description":"The current status of the report"
+                           }
+                        },
+                        "required":[
+                           "title",
+                           "status"
+                        ]
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Status report created",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "title":{
+                                 "type":"string",
+                                 "description":"The title of the status report",
+                                 "example":"Documenso"
+                              },
+                              "status":{
+                                 "type":"string",
+                                 "enum":[
+                                    "investigating",
+                                    "identified",
+                                    "monitoring",
+                                    "resolved"
+                                 ],
+                                 "description":"The current status of the report"
+                              },
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the status report"
+                              },
+                              "status_report_updates":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"number"
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The ids of the status report updates"
+                              }
+                           },
+                           "required":[
+                              "title",
+                              "status",
+                              "id",
+                              "status_report_updates"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/status_report/:id":{
+         "get":{
+            "tags":[
+               "status_report"
+            ],
+            "description":"Get an status report",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the status report",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"Get all status reports",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "title":{
+                                 "type":"string",
+                                 "description":"The title of the status report",
+                                 "example":"Documenso"
+                              },
+                              "status":{
+                                 "type":"string",
+                                 "enum":[
+                                    "investigating",
+                                    "identified",
+                                    "monitoring",
+                                    "resolved"
+                                 ],
+                                 "description":"The current status of the report"
+                              },
+                              "id":{
+                                 "type":"number",
+                                 "description":"The id of the status report"
+                              },
+                              "status_report_updates":{
+                                 "type":"array",
+                                 "items":{
+                                    "type":"number"
+                                 },
+                                 "default":[
+
+                                 ],
+                                 "description":"The ids of the status report updates"
+                              }
+                           },
+                           "required":[
+                              "title",
+                              "status",
+                              "id",
+                              "status_report_updates"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         },
+         "delete":{
+            "tags":[
+               "status_report"
+            ],
+            "description":"Delete an status report",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the status report",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "responses":{
+               "200":{
+                  "description":"Status report deleted",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "message":{
+                                 "type":"string",
+                                 "example":"Deleted"
+                              }
+                           },
+                           "required":[
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      },
+      "/status_report/:id/update":{
+         "post":{
+            "tags":[
+               "status_report"
+            ],
+            "description":"Create an status report update",
+            "parameters":[
+               {
+                  "schema":{
+                     "type":"string",
+                     "minLength":1,
+                     "description":"The id of the status report",
+                     "example":"1"
+                  },
+                  "required":true,
+                  "name":"id",
+                  "in":"path"
+               }
+            ],
+            "requestBody":{
+               "description":"the status report update",
+               "content":{
+                  "application/json":{
+                     "schema":{
+                        "type":"object",
+                        "properties":{
+                           "status":{
+                              "type":"string",
+                              "enum":[
+                                 "investigating",
+                                 "identified",
+                                 "monitoring",
+                                 "resolved"
+                              ],
+                              "description":"The status of the update"
+                           },
+                           "date":{
+                              "type":"string",
+                              "description":"The date of the update in ISO 8601 format"
+                           },
+                           "message":{
+                              "type":"string",
+                              "description":"The message of the update"
+                           }
+                        },
+                        "required":[
+                           "status",
+                           "date",
+                           "message"
+                        ]
+                     }
+                  }
+               }
+            },
+            "responses":{
+               "200":{
+                  "description":"Status report updated",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "status":{
+                                 "type":"string",
+                                 "enum":[
+                                    "investigating",
+                                    "identified",
+                                    "monitoring",
+                                    "resolved"
+                                 ],
+                                 "description":"The status of the update"
+                              },
+                              "id":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The id of the update"
+                              },
+                              "date":{
+                                 "type":"string",
+                                 "nullable":true,
+                                 "description":"The date of the update in ISO 8601 format"
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "description":"The message of the update"
+                              }
+                           },
+                           "required":[
+                              "status",
+                              "date",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               },
+               "400":{
+                  "description":"Returns an error",
+                  "content":{
+                     "application/json":{
+                        "schema":{
+                           "type":"object",
+                           "properties":{
+                              "code":{
+                                 "type":"number",
+                                 "example":400
+                              },
+                              "message":{
+                                 "type":"string",
+                                 "example":"Bad Request"
+                              }
+                           },
+                           "required":[
+                              "code",
+                              "message"
+                           ]
+                        }
+                     }
+                  }
+               }
+            }
+         }
+      }
+   }
+}

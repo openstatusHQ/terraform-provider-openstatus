@@ -1,0 +1,133 @@
+{
+	"provider": {
+		"name": "openstatus"
+	},
+	"resources": [
+		{
+			"name": "monitor",
+			"schema": {
+				"attributes": [
+					{
+						"name": "active",
+						"bool": {
+							"computed_optional_required": "computed_optional",
+							"default": {
+								"static": false
+							},
+							"description": "If the monitor is active"
+						}
+					},
+					{
+						"name": "body",
+						"string": {
+							"computed_optional_required": "computed_optional",
+							"description": "The body"
+						}
+					},
+					{
+						"name": "description",
+						"string": {
+							"computed_optional_required": "computed_optional",
+							"description": "The description of your monitor"
+						}
+					},
+					{
+						"name": "headers",
+						"list_nested": {
+							"computed_optional_required": "computed_optional",
+							"nested_object": {
+								"attributes": [
+									{
+										"name": "key",
+										"string": {
+											"computed_optional_required": "required"
+										}
+									},
+									{
+										"name": "value",
+										"string": {
+											"computed_optional_required": "required"
+										}
+									}
+								]
+							},
+							"description": "The headers of your request"
+						}
+					},
+					{
+						"name": "method",
+						"string": {
+							"computed_optional_required": "computed_optional",
+							"default": {
+								"static": "GET"
+							},
+							"validators": [
+								{
+									"custom": {
+										"imports": [
+											{
+												"path": "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+											}
+										],
+										"schema_definition": "stringvalidator.OneOf(\n\"GET\",\n\"POST\",\n\"HEAD\",\n)"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "name",
+						"string": {
+							"computed_optional_required": "computed_optional",
+							"description": "The name of the monitor"
+						}
+					},
+					{
+						"name": "periodicity",
+						"string": {
+							"computed_optional_required": "required",
+							"description": "How often the monitor should run",
+							"validators": [
+								{
+									"custom": {
+										"imports": [
+											{
+												"path": "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+											}
+										],
+										"schema_definition": "stringvalidator.OneOf(\n\"30s\",\n\"1m\",\n\"5m\",\n\"10m\",\n\"30m\",\n\"1h\",\n\"other\",\n)"
+									}
+								}
+							]
+						}
+					},
+					{
+						"name": "regions",
+						"list": {
+							"computed_optional_required": "required",
+							"element_type": {
+								"string": {}
+							},
+							"description": "The regions to use"
+						}
+					},
+					{
+						"name": "url",
+						"string": {
+							"computed_optional_required": "required",
+							"description": "The url to monitor"
+						}
+					},
+					{
+						"name": "id",
+						"number": {
+							"computed_optional_required": "computed",
+							"description": "The id of the monitor"
+						}
+					}
+				]
+			}
+		}
+	],
+	"version": "0.1"
+}

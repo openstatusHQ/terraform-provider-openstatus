@@ -1,0 +1,13 @@
+provider:
+  name: openstatus
+resources:
+  monitor:
+    create:
+      path: /monitor/
+      method: POST
+    read:
+      path: /monitor/:id
+      method: GET
+    update:
+      path: /monitor/:id
+      method: PUT
