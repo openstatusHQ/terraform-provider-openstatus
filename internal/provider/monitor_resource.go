@@ -2,7 +2,7 @@ package provider
 
 import (
 	"context"
-	"fmt"
+	"math/big"
 
 	"terraform-provider-openstatus/client"
 	"terraform-provider-openstatus/internal/resource_monitor"
@@ -80,7 +80,7 @@ func (r *monitorResource) Create(ctx context.Context, req resource.CreateRequest
 		})
 	}
 
-	client.CreateMonitor(ctx, r.client, client.CreateMonitorRequest{
+	out, err := client.CreateMonitor(ctx, r.client, client.MonitorRequest{
 		Active:      true,
 		Body:        data.Body.ValueString(),
 		Description: data.Description.ValueString(),
@@ -93,19 +93,49 @@ func (r *monitorResource) Create(ctx context.Context, req resource.CreateRequest
 		Method:      data.Method.ValueString(),
 	})
 
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating monitor", "Could not create the monitor:"+err.Error())
+		return
+	}
+
+	data.Id = types.NumberValue(big.NewFloat(float64(out.Id)))
+	data.Active = types.BoolValue(out.Active)
+	data.Body = types.StringValue(out.Body)
+	data.Description = types.StringValue(out.Description)
+	data.Url = types.StringValue(out.Url)
+	data.Name = types.StringValue(out.Name)
+	data.Periodicity = types.StringValue(out.Periodicity)
+	data.Method = types.StringValue(out.Method)
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *monitorResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {
 	var data resource_monitor.MonitorModel
 
-	resp.Diagnostics.Append(bindObject(ctx, &data)...)
+	resp.Diagnostics.Append(req.State.Get(ctx, &data)...)
+
 	if resp.Diagnostics.HasError() {
-		fmt.Print("Error")
 		return
+	}
+	if !data.Id.IsNull() {
+		monitor, err := client.GetMonitor(ctx, r.client, data.Id.String())
+		if err != nil {
+			resp.Diagnostics.AddError("Error reading monitor", "Could not read the monitor:"+err.Error())
+			return
+		}
+		data.Id = types.NumberValue(big.NewFloat(float64(monitor.Id)))
+		data.Active = types.BoolValue(monitor.Active)
+		data.Body = types.StringValue(monitor.Body)
+		data.Description = types.StringValue(monitor.Description)
+		data.Url = types.StringValue(monitor.Url)
+		data.Name = types.StringValue(monitor.Name)
+		data.Periodicity = types.StringValue(monitor.Periodicity)
+		data.Method = types.StringValue(monitor.Method)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+
 }
 
 func (r *monitorResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
@@ -131,6 +161,11 @@ func (r *monitorResource) Delete(ctx context.Context, req resource.DeleteRequest
 		return
 	}
 
+	err := client.DeleteMonitor(ctx, r.client, data.Id.String())
+	if err != nil {
+		resp.Diagnostics.AddError("Error creating monitor", "Could not create the monitor:")
+		return
+	}
 }
 
 func bindObject(ctx context.Context, monitor *resource_monitor.MonitorModel) diag.Diagnostics {

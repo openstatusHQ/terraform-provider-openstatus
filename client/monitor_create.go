@@ -2,11 +2,12 @@ package client
 
 import (
 	"context"
+	"encoding/json"
 
 	hreq "github.com/imroc/req/v3"
 )
 
-type CreateMonitorRequest struct {
+type MonitorRequest struct {
 	Active      bool   `json:"active"`
 	Body        string `json:"body"`
 	Description string `json:"description"`
@@ -22,14 +23,19 @@ type CreateMonitorRequest struct {
 	Url         string   `json:"url"`
 }
 
-func CreateMonitor(ctx context.Context, c *hreq.Client, request CreateMonitorRequest) {
-	// TODO - Implement this method
+func CreateMonitor(ctx context.Context, c *hreq.Client, request MonitorRequest) (*MonitorRequest, error) {
 
-	err := c.Post("monitor").SetBody(&request).Do()
+	response := c.Post("monitor").SetBody(&request).Do()
 
-	if err != nil {
-		panic(err)
+	if response.Err != nil {
+		return nil, response.Err
+
 	}
-	return
 
+	var monitor MonitorRequest
+	if err := json.NewDecoder(response.Body).Decode(&monitor); err != nil {
+		return nil, err
+	}
+
+	return &monitor, nil
 }
