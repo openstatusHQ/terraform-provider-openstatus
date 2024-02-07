@@ -11,7 +11,7 @@ import (
 
 func main() {
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/openstatus/openstatus",
+		Address: "registry.terraform.io/openstatusHQ/openstatus",
 	}
 
 	err := providerserver.Serve(context.Background(), provider.New(), opts)
