@@ -5,19 +5,17 @@ package resource_monitor
 import (
 	"context"
 	"fmt"
-	"strings"
-
+	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/numberplanmodifier"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
+	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 )
@@ -30,13 +28,66 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 				Computed:            true,
 				Description:         "If the monitor is active",
 				MarkdownDescription: "If the monitor is active",
-				Default:             booldefault.StaticBool(true),
+				Default:             booldefault.StaticBool(false),
+			},
+			"assertions": schema.ListNestedAttribute{
+				NestedObject: schema.NestedAttributeObject{
+					Attributes: map[string]schema.Attribute{
+						"compare": schema.StringAttribute{
+							Required:            true,
+							Description:         "The comparison to run",
+							MarkdownDescription: "The comparison to run",
+							Validators: []validator.String{
+								stringvalidator.OneOf(
+									"eq",
+									"not_eq",
+									"gt",
+									"gte",
+									"lt",
+									"lte",
+								),
+							},
+						},
+						"target": schema.Int64Attribute{
+							Required:            true,
+							Description:         "The target value",
+							MarkdownDescription: "The target value",
+							Validators: []validator.Int64{
+								int64validator.AtLeast(0),
+							},
+						},
+						"type": schema.StringAttribute{
+							Required: true,
+							Validators: []validator.String{
+								stringvalidator.OneOf(
+									"status",
+								),
+							},
+						},
+					},
+					CustomType: AssertionsType{
+						ObjectType: types.ObjectType{
+							AttrTypes: AssertionsValue{}.AttributeTypes(ctx),
+						},
+					},
+				},
+				Optional:            true,
+				Computed:            true,
+				Description:         "The assertions to run",
+				MarkdownDescription: "The assertions to run",
 			},
 			"body": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				Description:         "The body",
 				MarkdownDescription: "The body",
+				Default:             stringdefault.StaticString(""),
+			},
+			"degrated_after": schema.NumberAttribute{
+				Optional:            true,
+				Computed:            true,
+				Description:         "The time after the monitor is considered degrated",
+				MarkdownDescription: "The time after the monitor is considered degrated",
 			},
 			"description": schema.StringAttribute{
 				Optional:            true,
@@ -69,9 +120,6 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 				Computed:            true,
 				Description:         "The id of the monitor",
 				MarkdownDescription: "The id of the monitor",
-				PlanModifiers: []planmodifier.Number{
-                    numberplanmodifier.UseStateForUnknown(),
-                },
 			},
 			"method": schema.StringAttribute{
 				Optional: true,
@@ -86,8 +134,7 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 				Default: stringdefault.StaticString("GET"),
 			},
 			"name": schema.StringAttribute{
-				Optional:            true,
-				Computed:            true,
+				Required:            true,
 				Description:         "The name of the monitor",
 				MarkdownDescription: "The name of the monitor",
 			},
@@ -107,11 +154,25 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 					),
 				},
 			},
+			"public": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Description:         "If the monitor is public",
+				MarkdownDescription: "If the monitor is public",
+				Default:             booldefault.StaticBool(false),
+			},
 			"regions": schema.ListAttribute{
 				ElementType:         types.StringType,
-				Required:            true,
-				Description:         "The regions to use",
-				MarkdownDescription: "The regions to use",
+				Optional:            true,
+				Computed:            true,
+				Description:         "Where we should monitor it",
+				MarkdownDescription: "Where we should monitor it",
+			},
+			"timeout": schema.NumberAttribute{
+				Optional:            true,
+				Computed:            true,
+				Description:         "The timeout of the request",
+				MarkdownDescription: "The timeout of the request",
 			},
 			"url": schema.StringAttribute{
 				Required:            true,
@@ -123,16 +184,444 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 }
 
 type MonitorModel struct {
-	Active      types.Bool   `tfsdk:"active"`
-	Body        types.String `tfsdk:"body"`
-	Description types.String `tfsdk:"description"`
-	Headers     types.List   `tfsdk:"headers"`
-	Id          types.Number `tfsdk:"id"`
-	Method      types.String `tfsdk:"method"`
-	Name        types.String `tfsdk:"name"`
-	Periodicity types.String `tfsdk:"periodicity"`
-	Regions     types.List   `tfsdk:"regions"`
-	Url         types.String `tfsdk:"url"`
+	Active        types.Bool   `tfsdk:"active"`
+	Assertions    types.List   `tfsdk:"assertions"`
+	Body          types.String `tfsdk:"body"`
+	DegratedAfter types.Number `tfsdk:"degrated_after"`
+	Description   types.String `tfsdk:"description"`
+	Headers       types.List   `tfsdk:"headers"`
+	Id            types.Number `tfsdk:"id"`
+	Method        types.String `tfsdk:"method"`
+	Name          types.String `tfsdk:"name"`
+	Periodicity   types.String `tfsdk:"periodicity"`
+	Public        types.Bool   `tfsdk:"public"`
+	Regions       types.List   `tfsdk:"regions"`
+	Timeout       types.Number `tfsdk:"timeout"`
+	Url           types.String `tfsdk:"url"`
+}
+
+var _ basetypes.ObjectTypable = AssertionsType{}
+
+type AssertionsType struct {
+	basetypes.ObjectType
+}
+
+func (t AssertionsType) Equal(o attr.Type) bool {
+	other, ok := o.(AssertionsType)
+
+	if !ok {
+		return false
+	}
+
+	return t.ObjectType.Equal(other.ObjectType)
+}
+
+func (t AssertionsType) String() string {
+	return "AssertionsType"
+}
+
+func (t AssertionsType) ValueFromObject(ctx context.Context, in basetypes.ObjectValue) (basetypes.ObjectValuable, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	attributes := in.Attributes()
+
+	compareAttribute, ok := attributes["compare"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`compare is missing from object`)
+
+		return nil, diags
+	}
+
+	compareVal, ok := compareAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`compare expected to be basetypes.StringValue, was: %T`, compareAttribute))
+	}
+
+	targetAttribute, ok := attributes["target"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`target is missing from object`)
+
+		return nil, diags
+	}
+
+	targetVal, ok := targetAttribute.(basetypes.Int64Value)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`target expected to be basetypes.Int64Value, was: %T`, targetAttribute))
+	}
+
+	typeAttribute, ok := attributes["type"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`type is missing from object`)
+
+		return nil, diags
+	}
+
+	typeVal, ok := typeAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`type expected to be basetypes.StringValue, was: %T`, typeAttribute))
+	}
+
+	if diags.HasError() {
+		return nil, diags
+	}
+
+	return AssertionsValue{
+		Compare:        compareVal,
+		Target:         targetVal,
+		AssertionsType: typeVal,
+		state:          attr.ValueStateKnown,
+	}, diags
+}
+
+func NewAssertionsValueNull() AssertionsValue {
+	return AssertionsValue{
+		state: attr.ValueStateNull,
+	}
+}
+
+func NewAssertionsValueUnknown() AssertionsValue {
+	return AssertionsValue{
+		state: attr.ValueStateUnknown,
+	}
+}
+
+func NewAssertionsValue(attributeTypes map[string]attr.Type, attributes map[string]attr.Value) (AssertionsValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	// Reference: https://github.com/hashicorp/terraform-plugin-framework/issues/521
+	ctx := context.Background()
+
+	for name, attributeType := range attributeTypes {
+		attribute, ok := attributes[name]
+
+		if !ok {
+			diags.AddError(
+				"Missing AssertionsValue Attribute Value",
+				"While creating a AssertionsValue value, a missing attribute value was detected. "+
+					"A AssertionsValue must contain values for all attributes, even if null or unknown. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("AssertionsValue Attribute Name (%s) Expected Type: %s", name, attributeType.String()),
+			)
+
+			continue
+		}
+
+		if !attributeType.Equal(attribute.Type(ctx)) {
+			diags.AddError(
+				"Invalid AssertionsValue Attribute Type",
+				"While creating a AssertionsValue value, an invalid attribute value was detected. "+
+					"A AssertionsValue must use a matching attribute type for the value. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("AssertionsValue Attribute Name (%s) Expected Type: %s\n", name, attributeType.String())+
+					fmt.Sprintf("AssertionsValue Attribute Name (%s) Given Type: %s", name, attribute.Type(ctx)),
+			)
+		}
+	}
+
+	for name := range attributes {
+		_, ok := attributeTypes[name]
+
+		if !ok {
+			diags.AddError(
+				"Extra AssertionsValue Attribute Value",
+				"While creating a AssertionsValue value, an extra attribute value was detected. "+
+					"A AssertionsValue must not contain values beyond the expected attribute types. "+
+					"This is always an issue with the provider and should be reported to the provider developers.\n\n"+
+					fmt.Sprintf("Extra AssertionsValue Attribute Name: %s", name),
+			)
+		}
+	}
+
+	if diags.HasError() {
+		return NewAssertionsValueUnknown(), diags
+	}
+
+	compareAttribute, ok := attributes["compare"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`compare is missing from object`)
+
+		return NewAssertionsValueUnknown(), diags
+	}
+
+	compareVal, ok := compareAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`compare expected to be basetypes.StringValue, was: %T`, compareAttribute))
+	}
+
+	targetAttribute, ok := attributes["target"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`target is missing from object`)
+
+		return NewAssertionsValueUnknown(), diags
+	}
+
+	targetVal, ok := targetAttribute.(basetypes.Int64Value)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`target expected to be basetypes.Int64Value, was: %T`, targetAttribute))
+	}
+
+	typeAttribute, ok := attributes["type"]
+
+	if !ok {
+		diags.AddError(
+			"Attribute Missing",
+			`type is missing from object`)
+
+		return NewAssertionsValueUnknown(), diags
+	}
+
+	typeVal, ok := typeAttribute.(basetypes.StringValue)
+
+	if !ok {
+		diags.AddError(
+			"Attribute Wrong Type",
+			fmt.Sprintf(`type expected to be basetypes.StringValue, was: %T`, typeAttribute))
+	}
+
+	if diags.HasError() {
+		return NewAssertionsValueUnknown(), diags
+	}
+
+	return AssertionsValue{
+		Compare:        compareVal,
+		Target:         targetVal,
+		AssertionsType: typeVal,
+		state:          attr.ValueStateKnown,
+	}, diags
+}
+
+func NewAssertionsValueMust(attributeTypes map[string]attr.Type, attributes map[string]attr.Value) AssertionsValue {
+	object, diags := NewAssertionsValue(attributeTypes, attributes)
+
+	if diags.HasError() {
+		// This could potentially be added to the diag package.
+		diagsStrings := make([]string, 0, len(diags))
+
+		for _, diagnostic := range diags {
+			diagsStrings = append(diagsStrings, fmt.Sprintf(
+				"%s | %s | %s",
+				diagnostic.Severity(),
+				diagnostic.Summary(),
+				diagnostic.Detail()))
+		}
+
+		panic("NewAssertionsValueMust received error(s): " + strings.Join(diagsStrings, "\n"))
+	}
+
+	return object
+}
+
+func (t AssertionsType) ValueFromTerraform(ctx context.Context, in tftypes.Value) (attr.Value, error) {
+	if in.Type() == nil {
+		return NewAssertionsValueNull(), nil
+	}
+
+	if !in.Type().Equal(t.TerraformType(ctx)) {
+		return nil, fmt.Errorf("expected %s, got %s", t.TerraformType(ctx), in.Type())
+	}
+
+	if !in.IsKnown() {
+		return NewAssertionsValueUnknown(), nil
+	}
+
+	if in.IsNull() {
+		return NewAssertionsValueNull(), nil
+	}
+
+	attributes := map[string]attr.Value{}
+
+	val := map[string]tftypes.Value{}
+
+	err := in.As(&val)
+
+	if err != nil {
+		return nil, err
+	}
+
+	for k, v := range val {
+		a, err := t.AttrTypes[k].ValueFromTerraform(ctx, v)
+
+		if err != nil {
+			return nil, err
+		}
+
+		attributes[k] = a
+	}
+
+	return NewAssertionsValueMust(AssertionsValue{}.AttributeTypes(ctx), attributes), nil
+}
+
+func (t AssertionsType) ValueType(ctx context.Context) attr.Value {
+	return AssertionsValue{}
+}
+
+var _ basetypes.ObjectValuable = AssertionsValue{}
+
+type AssertionsValue struct {
+	Compare        basetypes.StringValue `tfsdk:"compare"`
+	Target         basetypes.Int64Value  `tfsdk:"target"`
+	AssertionsType basetypes.StringValue `tfsdk:"type"`
+	state          attr.ValueState
+}
+
+func (v AssertionsValue) ToTerraformValue(ctx context.Context) (tftypes.Value, error) {
+	attrTypes := make(map[string]tftypes.Type, 3)
+
+	var val tftypes.Value
+	var err error
+
+	attrTypes["compare"] = basetypes.StringType{}.TerraformType(ctx)
+	attrTypes["target"] = basetypes.Int64Type{}.TerraformType(ctx)
+	attrTypes["type"] = basetypes.StringType{}.TerraformType(ctx)
+
+	objectType := tftypes.Object{AttributeTypes: attrTypes}
+
+	switch v.state {
+	case attr.ValueStateKnown:
+		vals := make(map[string]tftypes.Value, 3)
+
+		val, err = v.Compare.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["compare"] = val
+
+		val, err = v.Target.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["target"] = val
+
+		val, err = v.AssertionsType.ToTerraformValue(ctx)
+
+		if err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		vals["type"] = val
+
+		if err := tftypes.ValidateValue(objectType, vals); err != nil {
+			return tftypes.NewValue(objectType, tftypes.UnknownValue), err
+		}
+
+		return tftypes.NewValue(objectType, vals), nil
+	case attr.ValueStateNull:
+		return tftypes.NewValue(objectType, nil), nil
+	case attr.ValueStateUnknown:
+		return tftypes.NewValue(objectType, tftypes.UnknownValue), nil
+	default:
+		panic(fmt.Sprintf("unhandled Object state in ToTerraformValue: %s", v.state))
+	}
+}
+
+func (v AssertionsValue) IsNull() bool {
+	return v.state == attr.ValueStateNull
+}
+
+func (v AssertionsValue) IsUnknown() bool {
+	return v.state == attr.ValueStateUnknown
+}
+
+func (v AssertionsValue) String() string {
+	return "AssertionsValue"
+}
+
+func (v AssertionsValue) ToObjectValue(ctx context.Context) (basetypes.ObjectValue, diag.Diagnostics) {
+	var diags diag.Diagnostics
+
+	objVal, diags := types.ObjectValue(
+		map[string]attr.Type{
+			"compare": basetypes.StringType{},
+			"target":  basetypes.Int64Type{},
+			"type":    basetypes.StringType{},
+		},
+		map[string]attr.Value{
+			"compare": v.Compare,
+			"target":  v.Target,
+			"type":    v.AssertionsType,
+		})
+
+	return objVal, diags
+}
+
+func (v AssertionsValue) Equal(o attr.Value) bool {
+	other, ok := o.(AssertionsValue)
+
+	if !ok {
+		return false
+	}
+
+	if v.state != other.state {
+		return false
+	}
+
+	if v.state != attr.ValueStateKnown {
+		return true
+	}
+
+	if !v.Compare.Equal(other.Compare) {
+		return false
+	}
+
+	if !v.Target.Equal(other.Target) {
+		return false
+	}
+
+	if !v.AssertionsType.Equal(other.AssertionsType) {
+		return false
+	}
+
+	return true
+}
+
+func (v AssertionsValue) Type(ctx context.Context) attr.Type {
+	return AssertionsType{
+		basetypes.ObjectType{
+			AttrTypes: v.AttributeTypes(ctx),
+		},
+	}
+}
+
+func (v AssertionsValue) AttributeTypes(ctx context.Context) map[string]attr.Type {
+	return map[string]attr.Type{
+		"compare": basetypes.StringType{},
+		"target":  basetypes.Int64Type{},
+		"type":    basetypes.StringType{},
+	}
 }
 
 var _ basetypes.ObjectTypable = HeadersType{}

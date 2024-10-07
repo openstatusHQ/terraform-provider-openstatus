@@ -3,7 +3,7 @@ provider:
 resources:
   monitor:
     create:
-      path: /monitor/
+      path: /monitor
       method: POST
     read:
       path: /monitor/:id
