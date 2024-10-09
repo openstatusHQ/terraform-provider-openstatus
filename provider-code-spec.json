@@ -18,10 +18,87 @@
 						}
 					},
 					{
+						"name": "assertions",
+						"list_nested": {
+							"computed_optional_required": "computed_optional",
+							"nested_object": {
+								"attributes": [
+									{
+										"name": "compare",
+										"string": {
+											"computed_optional_required": "required",
+											"description": "The comparison to run",
+											"validators": [
+												{
+													"custom": {
+														"imports": [
+															{
+																"path": "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+															}
+														],
+														"schema_definition": "stringvalidator.OneOf(\n\"eq\",\n\"not_eq\",\n\"gt\",\n\"gte\",\n\"lt\",\n\"lte\",\n)"
+													}
+												}
+											]
+										}
+									},
+									{
+										"name": "target",
+										"int64": {
+											"computed_optional_required": "required",
+											"description": "The target value",
+											"validators": [
+												{
+													"custom": {
+														"imports": [
+															{
+																"path": "github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
+															}
+														],
+														"schema_definition": "int64validator.AtLeast(0)"
+													}
+												}
+											]
+										}
+									},
+									{
+										"name": "type",
+										"string": {
+											"computed_optional_required": "required",
+											"validators": [
+												{
+													"custom": {
+														"imports": [
+															{
+																"path": "github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+															}
+														],
+														"schema_definition": "stringvalidator.OneOf(\n\"status\",\n)"
+													}
+												}
+											]
+										}
+									}
+								]
+							},
+							"description": "The assertions to run"
+						}
+					},
+					{
 						"name": "body",
 						"string": {
 							"computed_optional_required": "computed_optional",
+							"default": {
+								"static": ""
+							},
 							"description": "The body"
+						}
+					},
+					{
+						"name": "degrated_after",
+						"number": {
+							"computed_optional_required": "computed_optional",
+							"description": "The time after the monitor is considered degrated"
 						}
 					},
 					{
@@ -78,7 +155,7 @@
 					{
 						"name": "name",
 						"string": {
-							"computed_optional_required": "computed_optional",
+							"computed_optional_required": "required",
 							"description": "The name of the monitor"
 						}
 					},
@@ -102,13 +179,30 @@
 						}
 					},
 					{
+						"name": "public",
+						"bool": {
+							"computed_optional_required": "computed_optional",
+							"default": {
+								"static": false
+							},
+							"description": "If the monitor is public"
+						}
+					},
+					{
 						"name": "regions",
 						"list": {
-							"computed_optional_required": "required",
+							"computed_optional_required": "computed_optional",
 							"element_type": {
 								"string": {}
 							},
-							"description": "The regions to use"
+							"description": "Where we should monitor it"
+						}
+					},
+					{
+						"name": "timeout",
+						"number": {
+							"computed_optional_required": "computed_optional",
+							"description": "The timeout of the request"
 						}
 					},
 					{

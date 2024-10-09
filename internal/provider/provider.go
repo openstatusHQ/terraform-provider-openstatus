@@ -60,7 +60,7 @@ func (p *openstatusProvider) Configure(ctx context.Context, req provider.Configu
 	token := data.OpenStatusToken.ValueString()
 	p.token = token
 	p.client = hreq.C()
-	p.client.SetBaseURL("https://api.openstatus.dev/v1/")
+	p.client.SetBaseURL("http://localhost:8080/v1/")
 	p.client.SetCommonHeader("x-openstatus-key", token)
 
 	resp.ResourceData = ProviderConfig{
