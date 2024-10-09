@@ -15,16 +15,16 @@ type MonitorRequest struct {
 		Key   string `json:"key"`
 		Value string `json:"value"`
 	} `json:"headers,omitempty"`
-	Id            int64             `json:"id"`
-	Method        string            `json:"method"`
-	Name          string            `json:"name"`
-	Periodicity   string            `json:"periodicity"`
-	Regions       []string          `json:"regions"`
-	Url           string            `json:"url"`
-	Public        bool              `json:"public"`
-	RawAssertions []json.RawMessage `json:"assertions,omitempty"`
-	Timeout       int               `json:"timeout"`
-	DegratedAfter int               `json:"degratedAfter"`
+	Id            int64           `json:"id"`
+	Method        string          `json:"method"`
+	Name          string          `json:"name"`
+	Periodicity   string          `json:"periodicity"`
+	Regions       []string        `json:"regions"`
+	Url           string          `json:"url"`
+	Public        bool            `json:"public"`
+	Assertions    json.RawMessage `json:"assertions,omitempty"`
+	Timeout       int             `json:"timeout"`
+	DegradedAfter int             `json:"degradedAfter"`
 }
 
 func CreateMonitor(ctx context.Context, c *hreq.Client, request MonitorRequest) (*MonitorRequest, error) {
