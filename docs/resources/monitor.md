@@ -3,12 +3,12 @@
 page_title: "openstatus_monitor Resource - terraform-provider-openstatus"
 subcategory: ""
 description: |-
-  
+
 ---
 
 # openstatus_monitor (Resource)
 
-
+<https://docs.openstatus.dev/synthetic/features/monitor>
 
 
 

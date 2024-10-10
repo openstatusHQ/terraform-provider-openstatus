@@ -1,8 +1,7 @@
 terraform {
   required_providers {
     openstatus = {
-      source = "openstatus.dev/tf/openstatus"
-
+      source = "openstatusHQ/openstatus"
     }
   }
 }

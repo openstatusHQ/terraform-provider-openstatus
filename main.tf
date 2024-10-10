@@ -1,9 +1,7 @@
 terraform {
   required_providers {
     openstatus = {
-      source = "openstatus.dev/tf/openstatus"
-      # version = "~> 0.0.2"
-
+      source = "openstatusHQ/openstatus"
     }
   }
 }
@@ -11,16 +9,6 @@ terraform {
 provider "openstatus" {
   openstatus_api_token = "your-key"
 }
-
-# resource "openstatus_monitor" "my_monitor" {
-#   url   = "https://www.openstatus.dev"
-#   regions= ["iad", "jnb"]
-#   periodicity =  "10m"
-#   name = "test-monitor"
-#   active = true
-#   description = "This is a test monitor"
-# }
-
 
 
 resource "openstatus_monitor" "my_monitor" {
