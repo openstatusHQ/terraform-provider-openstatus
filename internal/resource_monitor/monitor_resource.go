@@ -191,6 +191,15 @@ func MonitorResourceSchema(ctx context.Context) schema.Schema {
 				Description:         "The url to monitor",
 				MarkdownDescription: "The url to monitor",
 			},
+			"type": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Description:         "The type of the monitor",
+				MarkdownDescription: "The type of the monitor",
+				Validators: []validator.String{stringvalidator.OneOf(
+					"http", "tcp",
+				)},
+			},
 		},
 	}
 }
@@ -210,6 +219,7 @@ type MonitorModel struct {
 	Regions       types.List   `tfsdk:"regions"`
 	Timeout       types.Number `tfsdk:"timeout"`
 	Url           types.String `tfsdk:"url"`
+	Type          types.String `tfsdk:"type"`
 }
 
 var _ basetypes.ObjectTypable = AssertionsType{}

@@ -138,6 +138,7 @@ func (r *monitorResource) Create(ctx context.Context, req resource.CreateRequest
 		Timeout:       int(timeout),
 		DegradedAfter: int(degradedAfter),
 		Assertions:    t,
+		Type:          data.Type.ValueString(),
 	})
 
 	if err != nil {
@@ -181,6 +182,7 @@ func (r *monitorResource) Read(ctx context.Context, req resource.ReadRequest, re
 		data.Name = types.StringValue(monitor.Name)
 		data.Periodicity = types.StringValue(monitor.Periodicity)
 		data.Method = types.StringValue(monitor.Method)
+		data.Type = types.StringValue(monitor.Type)
 	}
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
@@ -309,7 +311,7 @@ func (r *monitorResource) Update(ctx context.Context, req resource.UpdateRequest
 	data.Method = types.StringValue(out.Method)
 	data.DegradedAfter = types.NumberValue(big.NewFloat(float64(out.DegradedAfter)))
 	data.Timeout = types.NumberValue(big.NewFloat(float64(out.Timeout)))
-
+	data.Type = types.StringValue(out.Type)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 
 }
@@ -369,6 +371,9 @@ func bindObject(ctx context.Context, monitor *resource_monitor.MonitorModel) dia
 		if diags.HasError() {
 			return diags
 		}
+	}
+	if monitor.Type.IsUnknown() {
+		monitor.Type = types.StringNull()
 	}
 	if monitor.Headers.IsUnknown() || monitor.Headers.IsNull() {
 		monitor.Headers = types.ListNull(resource_monitor.HeadersValue{}.Type(ctx))
