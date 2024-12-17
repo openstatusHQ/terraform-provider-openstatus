@@ -28,7 +28,7 @@ provider "openstatus" {
 }
 
 
-resource "openstatus_monitor" "my_monitor" {
+resource "openstatus_monitor" "my_http_monitor" {
   url            = "https://www.openstatus.dev"
   regions        = ["iad", "jnb", "ams"]
   periodicity    = "10m"
@@ -60,6 +60,18 @@ resource "openstatus_monitor" "my_monitor" {
       compare = "eq"
     }
   ]
+}
+
+resource "openstatus_monitor" "my_tcp_monitor" {
+  url            = "openstatus.dev:443"
+  regions        = ["iad", "jnb", "ams"]
+  periodicity    = "10m"
+  name           = "test-monitor-terraform-tcp"
+  degraded_after = 30
+  timeout        = 13
+  active         = false
+  description    = "This is a test monitor"
+  type           = "tcp"
 }
 
 ```

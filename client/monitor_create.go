@@ -25,6 +25,7 @@ type MonitorRequest struct {
 	Assertions    json.RawMessage `json:"assertions,omitempty"`
 	Timeout       int             `json:"timeout"`
 	DegradedAfter int             `json:"degradedAfter"`
+	Type          string          `json:"jobType,omitempty"`
 }
 
 func CreateMonitor(ctx context.Context, c *hreq.Client, request MonitorRequest) (*MonitorRequest, error) {
