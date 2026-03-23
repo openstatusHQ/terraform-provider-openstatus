@@ -260,9 +260,9 @@ type httpMonitorAPIObject struct {
 	Timeout              jsonInt64                    `json:"timeout,omitempty"`
 	DegradedAt           jsonInt64                    `json:"degradedAt,omitempty"`
 	Retry                jsonInt64                    `json:"retry,omitempty"`
-	FollowRedirects      bool                         `json:"followRedirects,omitempty"`
-	Active               bool                         `json:"active,omitempty"`
-	Public               bool                         `json:"public,omitempty"`
+	FollowRedirects      bool                         `json:"followRedirects"`
+	Active               bool                         `json:"active"`
+	Public               bool                         `json:"public"`
 	Description          string                       `json:"description,omitempty"`
 	Regions              []string                     `json:"regions,omitempty"`
 	Headers              []apiHeader                  `json:"headers,omitempty"`
@@ -297,10 +297,14 @@ type httpMonitorAPIResponse struct {
 	Monitor httpMonitorAPIObject `json:"monitor"`
 }
 
-type getMonitorResponse struct {
+type getMonitorResponseInner struct {
 	HTTP *httpMonitorAPIObject `json:"http,omitempty"`
 	TCP  *tcpMonitorAPIObject  `json:"tcp,omitempty"`
 	DNS  *dnsMonitorAPIObject  `json:"dns,omitempty"`
+}
+
+type getMonitorResponse struct {
+	Monitor getMonitorResponseInner `json:"monitor"`
 }
 
 func (r *httpMonitorResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -345,12 +349,12 @@ func (r *httpMonitorResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	if apiResp.HTTP == nil {
+	if apiResp.Monitor.HTTP == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(httpAPIToModel(ctx, *apiResp.HTTP, &data)...)
+	resp.Diagnostics.Append(httpAPIToModel(ctx, *apiResp.Monitor.HTTP, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

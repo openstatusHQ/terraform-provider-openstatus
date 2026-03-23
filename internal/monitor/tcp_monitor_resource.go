@@ -130,8 +130,8 @@ type tcpMonitorAPIObject struct {
 	Timeout     jsonInt64 `json:"timeout,omitempty"`
 	DegradedAt  jsonInt64 `json:"degradedAt,omitempty"`
 	Retry       jsonInt64 `json:"retry,omitempty"`
-	Active      bool     `json:"active,omitempty"`
-	Public      bool     `json:"public,omitempty"`
+	Active      bool     `json:"active"`
+	Public      bool     `json:"public"`
 	Description string   `json:"description,omitempty"`
 	Regions     []string `json:"regions,omitempty"`
 	Status      string   `json:"status,omitempty"`
@@ -194,12 +194,12 @@ func (r *tcpMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	if apiResp.TCP == nil {
+	if apiResp.Monitor.TCP == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(tcpAPIToModel(ctx, *apiResp.TCP, &data)...)
+	resp.Diagnostics.Append(tcpAPIToModel(ctx, *apiResp.Monitor.TCP, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
