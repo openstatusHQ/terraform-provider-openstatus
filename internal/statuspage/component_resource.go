@@ -39,6 +39,7 @@ type componentModel struct {
 	Description types.String `tfsdk:"description"`
 	Order       types.Int64  `tfsdk:"order"`
 	GroupID     types.String `tfsdk:"group_id"`
+	GroupOrder  types.Int64  `tfsdk:"group_order"`
 	CreatedAt   types.String `tfsdk:"created_at"`
 	UpdatedAt   types.String `tfsdk:"updated_at"`
 }
@@ -84,11 +85,17 @@ func (r *componentResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Validators: []validator.String{stringvalidator.LengthAtMost(1024)},
 			},
 			"order": schema.Int64Attribute{
-				Optional: true,
-				Computed: true,
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Display order of the component's group on the status page.",
 			},
 			"group_id": schema.StringAttribute{
 				Optional: true,
+			},
+			"group_order": schema.Int64Attribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Display order of the component within its group.",
 			},
 			"created_at": schema.StringAttribute{Computed: true},
 			"updated_at": schema.StringAttribute{Computed: true},
@@ -101,16 +108,18 @@ type apiAddMonitorComponentRequest struct {
 	MonitorID   string `json:"monitorId"`
 	Name        string `json:"name,omitempty"`
 	Description string `json:"description,omitempty"`
-	Order       int64  `json:"order,omitempty"`
+	Order       *int64 `json:"order,omitempty"`
 	GroupID     string `json:"groupId,omitempty"`
+	GroupOrder  *int64 `json:"groupOrder,omitempty"`
 }
 
 type apiAddStaticComponentRequest struct {
 	PageID      string `json:"pageId"`
 	Name        string `json:"name"`
 	Description string `json:"description,omitempty"`
-	Order       int64  `json:"order,omitempty"`
+	Order       *int64 `json:"order,omitempty"`
 	GroupID     string `json:"groupId,omitempty"`
+	GroupOrder  *int64 `json:"groupOrder,omitempty"`
 }
 
 type apiComponentResponse struct {
@@ -126,6 +135,7 @@ type apiComponent struct {
 	MonitorID   string `json:"monitorId"`
 	Order       int64  `json:"order"`
 	GroupID     string `json:"groupId"`
+	GroupOrder  int64  `json:"groupOrder"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }
@@ -136,6 +146,7 @@ type apiUpdateComponentRequest struct {
 	Description *string `json:"description,omitempty"`
 	Order       *int64  `json:"order,omitempty"`
 	GroupID     *string `json:"groupId,omitempty"`
+	GroupOrder  *int64  `json:"groupOrder,omitempty"`
 }
 
 type apiStatusPageContentResponse struct {
@@ -160,8 +171,15 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 			MonitorID:   data.MonitorID.ValueString(),
 			Name:        data.Name.ValueString(),
 			Description: data.Description.ValueString(),
-			Order:       data.Order.ValueInt64(),
 			GroupID:     data.GroupID.ValueString(),
+		}
+		if !data.Order.IsNull() && !data.Order.IsUnknown() {
+			v := data.Order.ValueInt64()
+			apiReq.Order = &v
+		}
+		if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
+			v := data.GroupOrder.ValueInt64()
+			apiReq.GroupOrder = &v
 		}
 		err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/AddMonitorComponent", apiReq, &apiResp)
 	} else {
@@ -169,8 +187,15 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 			PageID:      data.PageID.ValueString(),
 			Name:        data.Name.ValueString(),
 			Description: data.Description.ValueString(),
-			Order:       data.Order.ValueInt64(),
 			GroupID:     data.GroupID.ValueString(),
+		}
+		if !data.Order.IsNull() && !data.Order.IsUnknown() {
+			v := data.Order.ValueInt64()
+			apiReq.Order = &v
+		}
+		if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
+			v := data.GroupOrder.ValueInt64()
+			apiReq.GroupOrder = &v
 		}
 		err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/AddStaticComponent", apiReq, &apiResp)
 	}
@@ -235,9 +260,13 @@ func (r *componentResource) Update(ctx context.Context, req resource.UpdateReque
 		v := data.Order.ValueInt64()
 		updateReq.Order = &v
 	}
-	if !data.GroupID.IsNull() {
+	if !data.GroupID.IsNull() && !data.GroupID.IsUnknown() {
 		v := data.GroupID.ValueString()
 		updateReq.GroupID = &v
+	}
+	if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
+		v := data.GroupOrder.ValueInt64()
+		updateReq.GroupOrder = &v
 	}
 
 	var apiResp apiComponentResponse
@@ -300,6 +329,7 @@ func componentAPIToModel(api apiComponent, data *componentModel) {
 		data.Description = types.StringValue(api.Description)
 	}
 	data.Order = types.Int64Value(api.Order)
+	data.GroupOrder = types.Int64Value(api.GroupOrder)
 	if api.GroupID != "" {
 		data.GroupID = types.StringValue(api.GroupID)
 	}
