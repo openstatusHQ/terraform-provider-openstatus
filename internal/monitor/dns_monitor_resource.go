@@ -159,8 +159,8 @@ type dnsMonitorAPIObject struct {
 	Timeout          jsonInt64             `json:"timeout,omitempty"`
 	DegradedAt       jsonInt64             `json:"degradedAt,omitempty"`
 	Retry            jsonInt64             `json:"retry,omitempty"`
-	Active           bool                  `json:"active,omitempty"`
-	Public           bool                  `json:"public,omitempty"`
+	Active           bool                  `json:"active"`
+	Public           bool                  `json:"public"`
 	Description      string                `json:"description,omitempty"`
 	Regions          []string              `json:"regions,omitempty"`
 	RecordAssertions []apiRecordAssertion  `json:"recordAssertions,omitempty"`
@@ -230,12 +230,12 @@ func (r *dnsMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	if apiResp.DNS == nil {
+	if apiResp.Monitor.DNS == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(dnsAPIToModel(ctx, *apiResp.DNS, &data)...)
+	resp.Diagnostics.Append(dnsAPIToModel(ctx, *apiResp.Monitor.DNS, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 

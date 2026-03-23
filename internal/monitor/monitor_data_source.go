@@ -85,42 +85,42 @@ func (d *monitorDataSource) Read(ctx context.Context, req datasource.ReadRequest
 	}
 
 	switch {
-	case apiResp.HTTP != nil:
+	case apiResp.Monitor.HTTP != nil:
 		data.Type = types.StringValue("http")
-		data.Name = types.StringValue(apiResp.HTTP.Name)
-		data.URL = types.StringValue(apiResp.HTTP.URL)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.HTTP.Periodicity))
-		data.Method = types.StringValue(MapMethodFromAPI(apiResp.HTTP.Method))
-		data.Active = types.BoolValue(apiResp.HTTP.Active)
-		data.Public = types.BoolValue(apiResp.HTTP.Public)
-		data.Description = types.StringValue(apiResp.HTTP.Description)
-		data.Timeout = types.Int64Value(apiResp.HTTP.Timeout.Int64())
-		if apiResp.HTTP.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.HTTP.Status))
+		data.Name = types.StringValue(apiResp.Monitor.HTTP.Name)
+		data.URL = types.StringValue(apiResp.Monitor.HTTP.URL)
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.HTTP.Periodicity))
+		data.Method = types.StringValue(MapMethodFromAPI(apiResp.Monitor.HTTP.Method))
+		data.Active = types.BoolValue(apiResp.Monitor.HTTP.Active)
+		data.Public = types.BoolValue(apiResp.Monitor.HTTP.Public)
+		data.Description = types.StringValue(apiResp.Monitor.HTTP.Description)
+		data.Timeout = types.Int64Value(apiResp.Monitor.HTTP.Timeout.Int64())
+		if apiResp.Monitor.HTTP.Status != "" {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.HTTP.Status))
 		}
-	case apiResp.TCP != nil:
+	case apiResp.Monitor.TCP != nil:
 		data.Type = types.StringValue("tcp")
-		data.Name = types.StringValue(apiResp.TCP.Name)
-		data.URI = types.StringValue(apiResp.TCP.URI)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.TCP.Periodicity))
-		data.Active = types.BoolValue(apiResp.TCP.Active)
-		data.Public = types.BoolValue(apiResp.TCP.Public)
-		data.Description = types.StringValue(apiResp.TCP.Description)
-		data.Timeout = types.Int64Value(apiResp.TCP.Timeout.Int64())
-		if apiResp.TCP.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.TCP.Status))
+		data.Name = types.StringValue(apiResp.Monitor.TCP.Name)
+		data.URI = types.StringValue(apiResp.Monitor.TCP.URI)
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.TCP.Periodicity))
+		data.Active = types.BoolValue(apiResp.Monitor.TCP.Active)
+		data.Public = types.BoolValue(apiResp.Monitor.TCP.Public)
+		data.Description = types.StringValue(apiResp.Monitor.TCP.Description)
+		data.Timeout = types.Int64Value(apiResp.Monitor.TCP.Timeout.Int64())
+		if apiResp.Monitor.TCP.Status != "" {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.TCP.Status))
 		}
-	case apiResp.DNS != nil:
+	case apiResp.Monitor.DNS != nil:
 		data.Type = types.StringValue("dns")
-		data.Name = types.StringValue(apiResp.DNS.Name)
-		data.URI = types.StringValue(apiResp.DNS.URI)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.DNS.Periodicity))
-		data.Active = types.BoolValue(apiResp.DNS.Active)
-		data.Public = types.BoolValue(apiResp.DNS.Public)
-		data.Description = types.StringValue(apiResp.DNS.Description)
-		data.Timeout = types.Int64Value(apiResp.DNS.Timeout.Int64())
-		if apiResp.DNS.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.DNS.Status))
+		data.Name = types.StringValue(apiResp.Monitor.DNS.Name)
+		data.URI = types.StringValue(apiResp.Monitor.DNS.URI)
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.DNS.Periodicity))
+		data.Active = types.BoolValue(apiResp.Monitor.DNS.Active)
+		data.Public = types.BoolValue(apiResp.Monitor.DNS.Public)
+		data.Description = types.StringValue(apiResp.Monitor.DNS.Description)
+		data.Timeout = types.Int64Value(apiResp.Monitor.DNS.Timeout.Int64())
+		if apiResp.Monitor.DNS.Status != "" {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.DNS.Status))
 		}
 	default:
 		resp.Diagnostics.AddError("Monitor not found", "No monitor returned for ID: "+data.ID.ValueString())
