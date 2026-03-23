@@ -2,8 +2,12 @@ package provider
 
 import (
 	"context"
+	"os"
 
-	hreq "github.com/imroc/req/v3"
+	"terraform-provider-openstatus/internal/client"
+	"terraform-provider-openstatus/internal/monitor"
+	"terraform-provider-openstatus/internal/notification"
+	"terraform-provider-openstatus/internal/statuspage"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -20,64 +24,79 @@ func New() func() provider.Provider {
 	}
 }
 
-type ProviderConfig struct {
-	client *hreq.Client
+type openstatusProvider struct{}
+
+type openstatusProviderModel struct {
+	APIToken types.String `tfsdk:"api_token"`
+	BaseURL  types.String `tfsdk:"base_url"`
 }
 
-type openstatusProvider struct {
-	client *hreq.Client
-	token  string
-}
-
-type openStatusProviderData struct {
-	OpenStatusToken types.String `tfsdk:"openstatus_api_token"`
-}
-
-func (p *openstatusProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *openstatusProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
+		MarkdownDescription: "The OpenStatus provider allows you to manage monitors, status pages, and notifications.",
 		Attributes: map[string]schema.Attribute{
-			"openstatus_api_token": schema.StringAttribute{
-				MarkdownDescription: "openstatus.dev api token.",
-				Required:            true,
+			"api_token": schema.StringAttribute{
+				MarkdownDescription: "OpenStatus API token. Can also be set via the `OPENSTATUS_API_TOKEN` environment variable.",
+				Optional:            true,
+				Sensitive:           true,
+			},
+			"base_url": schema.StringAttribute{
+				MarkdownDescription: "Base URL for the OpenStatus API. Defaults to `https://api.openstatus.dev/rpc`.",
+				Optional:            true,
 			},
 		},
 	}
 }
 
 func (p *openstatusProvider) Configure(ctx context.Context, req provider.ConfigureRequest, resp *provider.ConfigureResponse) {
-	var data openStatusProviderData
-	diags := req.Config.Get(ctx, &data)
-	resp.Diagnostics.Append(diags...)
-
+	var data openstatusProviderModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
 	if resp.Diagnostics.HasError() {
 		return
 	}
-	if data.OpenStatusToken.IsUnknown() || data.OpenStatusToken.IsNull() {
-		resp.Diagnostics.AddError("openstatus_api_token is required",
-			"openstatus_api_token is required")
+
+	apiToken := data.APIToken.ValueString()
+	if apiToken == "" {
+		apiToken = os.Getenv("OPENSTATUS_API_TOKEN")
+	}
+	if apiToken == "" {
+		resp.Diagnostics.AddError(
+			"Missing API Token",
+			"Set api_token in the provider configuration or the OPENSTATUS_API_TOKEN environment variable.",
+		)
 		return
 	}
-	token := data.OpenStatusToken.ValueString()
-	p.token = token
-	p.client = hreq.C()
-	p.client.SetBaseURL("https://api.openstatus.dev/v1/")
-	p.client.SetCommonHeader("x-openstatus-key", token)
 
-	resp.ResourceData = ProviderConfig{
-		client: p.client,
-	}
+	baseURL := data.BaseURL.ValueString()
+
+	c := client.New(baseURL, apiToken)
+
+	config := client.ProviderConfig{Client: c}
+	resp.ResourceData = config
+	resp.DataSourceData = config
 }
 
-func (p *openstatusProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *openstatusProvider) Metadata(_ context.Context, _ provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "openstatus"
 }
 
-func (p *openstatusProvider) DataSources(ctx context.Context) []func() datasource.DataSource {
-	return []func() datasource.DataSource{}
+func (p *openstatusProvider) DataSources(_ context.Context) []func() datasource.DataSource {
+	return []func() datasource.DataSource{
+		monitor.NewMonitorDataSource,
+		monitor.NewMonitorsDataSource,
+		statuspage.NewStatusPageDataSource,
+		notification.NewNotificationDataSource,
+	}
 }
 
-func (p *openstatusProvider) Resources(ctx context.Context) []func() resource.Resource {
+func (p *openstatusProvider) Resources(_ context.Context) []func() resource.Resource {
 	return []func() resource.Resource{
-		NewMonitorResource,
+		monitor.NewHTTPMonitorResource,
+		monitor.NewTCPMonitorResource,
+		monitor.NewDNSMonitorResource,
+		notification.NewNotificationResource,
+		statuspage.NewStatusPageResource,
+		statuspage.NewComponentResource,
+		statuspage.NewComponentGroupResource,
 	}
 }
