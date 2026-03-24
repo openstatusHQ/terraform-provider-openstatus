@@ -2,13 +2,17 @@ package statuspage
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 
 	"terraform-provider-openstatus/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -32,18 +36,21 @@ type statusPageResource struct {
 }
 
 type statusPageModel struct {
-	ID           types.String `tfsdk:"id"`
-	Title        types.String `tfsdk:"title"`
-	Slug         types.String `tfsdk:"slug"`
-	Description  types.String `tfsdk:"description"`
-	HomepageURL  types.String `tfsdk:"homepage_url"`
-	ContactURL   types.String `tfsdk:"contact_url"`
-	CustomDomain types.String `tfsdk:"custom_domain"`
-	Published    types.Bool   `tfsdk:"published"`
-	AccessType   types.String `tfsdk:"access_type"`
-	Theme        types.String `tfsdk:"theme"`
-	CreatedAt    types.String `tfsdk:"created_at"`
-	UpdatedAt    types.String `tfsdk:"updated_at"`
+	ID               types.String `tfsdk:"id"`
+	Title            types.String `tfsdk:"title"`
+	Slug             types.String `tfsdk:"slug"`
+	Description      types.String `tfsdk:"description"`
+	HomepageURL      types.String `tfsdk:"homepage_url"`
+	ContactURL       types.String `tfsdk:"contact_url"`
+	Icon             types.String `tfsdk:"icon"`
+	CustomDomain     types.String `tfsdk:"custom_domain"`
+	AccessType       types.String `tfsdk:"access_type"`
+	Password         types.String `tfsdk:"password"`
+	AuthEmailDomains types.List   `tfsdk:"auth_email_domains"`
+	Published        types.Bool   `tfsdk:"published"`
+	Theme            types.String `tfsdk:"theme"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
 }
 
 func (r *statusPageResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -61,7 +68,7 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	requiresReplace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
 
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a status page. Note: the API does not support updates, so any change to mutable attributes will destroy and recreate the resource.",
+		MarkdownDescription: "Manages a status page. Any change to mutable attributes will destroy and recreate the resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -90,17 +97,46 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:      true,
 				PlanModifiers: requiresReplace,
 			},
-			"custom_domain": schema.StringAttribute{Computed: true},
-			"published":     schema.BoolAttribute{Computed: true},
-			"access_type":   schema.StringAttribute{Computed: true},
-			"theme":         schema.StringAttribute{Computed: true},
+			"icon": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "URL of the icon to display on the status page.",
+				PlanModifiers:       requiresReplace,
+			},
+			"custom_domain": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Custom domain for the status page. Must be configured within the dashboard.",
+				PlanModifiers:       requiresReplace,
+			},
+			"access_type": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`.",
+				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain")},
+				PlanModifiers:       requiresReplace,
+			},
+			"password": schema.StringAttribute{
+				Optional:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Password to protect the status page. Required when `access_type` is `password`.",
+				PlanModifiers:       requiresReplace,
+			},
+			"auth_email_domains": schema.ListAttribute{
+				Optional:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "List of email domains allowed to access the page. Used when `access_type` is `email-domain`.",
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace()},
+			},
+			"published": schema.BoolAttribute{Computed: true},
+			"theme":     schema.StringAttribute{Computed: true},
 			"created_at":    schema.StringAttribute{Computed: true},
 			"updated_at":    schema.StringAttribute{Computed: true},
 		},
 	}
 }
 
-type apiStatusPageCreateRequest struct {
+// apiRPCCreateRequest is sent to the RPC CreateStatusPage endpoint.
+type apiRPCCreateRequest struct {
 	Title       string `json:"title"`
 	Slug        string `json:"slug"`
 	Description string `json:"description,omitempty"`
@@ -108,23 +144,40 @@ type apiStatusPageCreateRequest struct {
 	ContactURL  string `json:"contactUrl,omitempty"`
 }
 
-type apiStatusPageResponse struct {
-	StatusPage apiStatusPage `json:"statusPage"`
+// apiRPCResponse wraps the RPC response which nests the page under "statusPage".
+type apiRPCResponse struct {
+	StatusPage apiRPCStatusPage `json:"statusPage"`
 }
 
-type apiStatusPage struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Slug         string `json:"slug"`
-	Description  string `json:"description"`
-	HomepageURL  string `json:"homepageUrl"`
-	ContactURL   string `json:"contactUrl"`
-	CustomDomain string `json:"customDomain"`
-	Published    bool   `json:"published"`
-	AccessType   string `json:"accessType"`
-	Theme        string `json:"theme"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+// apiRPCStatusPage is the page object returned by the RPC API (string ID).
+type apiRPCStatusPage struct {
+	ID string `json:"id"`
+}
+
+// apiRESTUpdateRequest is sent to the REST v1 PUT endpoint for fields not supported by RPC.
+type apiRESTUpdateRequest struct {
+	Icon             string   `json:"icon,omitempty"`
+	CustomDomain     string   `json:"customDomain,omitempty"`
+	AccessType       string   `json:"accessType,omitempty"`
+	Password         string   `json:"password,omitempty"`
+	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
+}
+
+// apiRESTStatusPage is the flat JSON response from the REST v1 API (numeric ID).
+type apiRESTStatusPage struct {
+	ID               int      `json:"id"`
+	Title            string   `json:"title"`
+	Slug             string   `json:"slug"`
+	Description      string   `json:"description"`
+	Icon             string   `json:"icon"`
+	CustomDomain     string   `json:"customDomain"`
+	Published        bool     `json:"published"`
+	AccessType       string   `json:"accessType"`
+	Password         string   `json:"password"`
+	AuthEmailDomains []string `json:"authEmailDomains"`
+	Theme            string   `json:"theme"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
 }
 
 func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -134,7 +187,8 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	apiReq := apiStatusPageCreateRequest{
+	// Step 1: Create via RPC (supports homepageUrl/contactUrl).
+	rpcReq := apiRPCCreateRequest{
 		Title:       data.Title.ValueString(),
 		Slug:        data.Slug.ValueString(),
 		Description: data.Description.ValueString(),
@@ -142,14 +196,41 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		ContactURL:  data.ContactURL.ValueString(),
 	}
 
-	var apiResp apiStatusPageResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateStatusPage", apiReq, &apiResp)
+	var rpcResp apiRPCResponse
+	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateStatusPage", rpcReq, &rpcResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating status page", err.Error())
 		return
 	}
 
-	statusPageAPIToModel(apiResp.StatusPage, &data)
+	pageID := rpcResp.StatusPage.ID
+	// Save ID immediately so Terraform can track/delete the resource on retry.
+	data.ID = types.StringValue(pageID)
+
+	// Step 2: If REST-only fields are set, update via REST PUT.
+	restReq := buildRESTUpdateRequest(&data, ctx, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if restReq != nil {
+		err = r.client.DoREST(ctx, http.MethodPut, fmt.Sprintf("/page/%s", pageID), restReq, nil)
+		if err != nil {
+			// Save partial state so the resource can be cleaned up.
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			resp.Diagnostics.AddError("Error updating status page (REST)", err.Error())
+			return
+		}
+	}
+
+	// Step 3: Read back full state via REST.
+	var apiResp apiRESTStatusPage
+	err = r.client.DoREST(ctx, http.MethodGet, fmt.Sprintf("/page/%s", pageID), nil, &apiResp)
+	if err != nil {
+		resp.Diagnostics.AddError("Error reading status page after create", err.Error())
+		return
+	}
+
+	restAPIToModel(ctx, apiResp, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -160,9 +241,8 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var apiResp apiStatusPageResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	var apiResp apiRESTStatusPage
+	err := r.client.DoREST(ctx, http.MethodGet, fmt.Sprintf("/page/%s", data.ID.ValueString()), nil, &apiResp)
 	if err != nil {
 		if isNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -172,7 +252,7 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	statusPageAPIToModel(apiResp.StatusPage, &data)
+	restAPIToModel(ctx, apiResp, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -198,22 +278,55 @@ func (r *statusPageResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-func statusPageAPIToModel(api apiStatusPage, data *statusPageModel) {
-	data.ID = types.StringValue(api.ID)
+// buildRESTUpdateRequest returns a REST update request for fields not supported by the RPC API.
+// Returns nil if no REST-only fields are set.
+func buildRESTUpdateRequest(data *statusPageModel, ctx context.Context, diags *diag.Diagnostics) *apiRESTUpdateRequest {
+	req := &apiRESTUpdateRequest{
+		Icon:         data.Icon.ValueString(),
+		CustomDomain: data.CustomDomain.ValueString(),
+		AccessType:   data.AccessType.ValueString(),
+		Password:     data.Password.ValueString(),
+	}
+
+	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
+		var domains []string
+		diags.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
+		req.AuthEmailDomains = domains
+	}
+
+	// Only return the request if at least one field is set.
+	if req.Icon == "" && req.CustomDomain == "" && req.AccessType == "" && req.Password == "" && req.AuthEmailDomains == nil {
+		return nil
+	}
+	return req
+}
+
+// restAPIToModel maps a REST v1 API response to the Terraform model.
+// Fields not returned by the REST API (homepageUrl, contactUrl) are preserved from the existing model.
+func restAPIToModel(ctx context.Context, api apiRESTStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
+	data.ID = types.StringValue(fmt.Sprintf("%d", api.ID))
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
 	if api.Description != "" || !data.Description.IsNull() {
 		data.Description = types.StringValue(api.Description)
 	}
-	if api.HomepageURL != "" || !data.HomepageURL.IsNull() {
-		data.HomepageURL = types.StringValue(api.HomepageURL)
+	// homepageUrl and contactUrl are not returned by the REST API — preserve from state.
+	if api.Icon != "" || !data.Icon.IsNull() {
+		data.Icon = types.StringValue(api.Icon)
 	}
-	if api.ContactURL != "" || !data.ContactURL.IsNull() {
-		data.ContactURL = types.StringValue(api.ContactURL)
+	if api.CustomDomain != "" || !data.CustomDomain.IsNull() {
+		data.CustomDomain = types.StringValue(api.CustomDomain)
 	}
-	data.CustomDomain = types.StringValue(api.CustomDomain)
 	data.Published = types.BoolValue(api.Published)
 	data.AccessType = types.StringValue(api.AccessType)
+	if api.Password != "" || !data.Password.IsNull() {
+		data.Password = types.StringValue(api.Password)
+	}
+	if len(api.AuthEmailDomains) > 0 || !data.AuthEmailDomains.IsNull() {
+		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
+		diags.Append(listDiags...)
+		data.AuthEmailDomains = list
+	}
 	data.Theme = types.StringValue(api.Theme)
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)

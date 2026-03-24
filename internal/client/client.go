@@ -7,9 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 )
 
 const DefaultBaseURL = "https://api.openstatus.dev/rpc"
+const DefaultRESTBaseURL = "https://api.openstatus.dev/v1"
 
 type ProviderConfig struct {
 	Client *Client
@@ -25,29 +27,45 @@ func (e *APIError) Error() string {
 }
 
 type Client struct {
-	baseURL    string
-	apiKey     string
-	httpClient *http.Client
+	baseURL     string
+	restBaseURL string
+	apiKey      string
+	httpClient  *http.Client
 }
 
 func New(baseURL, apiKey string) *Client {
 	if baseURL == "" {
 		baseURL = DefaultBaseURL
 	}
+	restBaseURL := strings.TrimSuffix(baseURL, "/rpc") + "/v1"
 	return &Client{
-		baseURL:    baseURL,
-		apiKey:     apiKey,
-		httpClient: &http.Client{},
+		baseURL:     baseURL,
+		restBaseURL: restBaseURL,
+		apiKey:      apiKey,
+		httpClient:  &http.Client{},
 	}
 }
 
 func (c *Client) Do(ctx context.Context, path string, reqBody, respBody any) error {
-	body, err := json.Marshal(reqBody)
-	if err != nil {
-		return fmt.Errorf("marshaling request: %w", err)
+	return c.doRequest(ctx, http.MethodPost, c.baseURL+path, reqBody, respBody)
+}
+
+// DoREST sends a request to the REST v1 API with the given HTTP method and path.
+func (c *Client) DoREST(ctx context.Context, method, path string, reqBody, respBody any) error {
+	return c.doRequest(ctx, method, c.restBaseURL+path, reqBody, respBody)
+}
+
+func (c *Client) doRequest(ctx context.Context, method, url string, reqBody, respBody any) error {
+	var bodyReader io.Reader
+	if reqBody != nil {
+		body, err := json.Marshal(reqBody)
+		if err != nil {
+			return fmt.Errorf("marshaling request: %w", err)
+		}
+		bodyReader = bytes.NewReader(body)
 	}
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+path, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, method, url, bodyReader)
 	if err != nil {
 		return fmt.Errorf("creating request: %w", err)
 	}

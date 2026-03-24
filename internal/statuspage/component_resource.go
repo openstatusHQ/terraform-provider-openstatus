@@ -150,8 +150,7 @@ type apiUpdateComponentRequest struct {
 }
 
 type apiStatusPageContentResponse struct {
-	StatusPage apiStatusPage  `json:"statusPage"`
-	Components []apiComponent `json:"components"`
+	Components []apiComponent      `json:"components"`
 	Groups     []apiComponentGroup `json:"groups"`
 }
 
@@ -328,8 +327,12 @@ func componentAPIToModel(api apiComponent, data *componentModel) {
 	if api.Description != "" {
 		data.Description = types.StringValue(api.Description)
 	}
-	data.Order = types.Int64Value(api.Order)
-	data.GroupOrder = types.Int64Value(api.GroupOrder)
+	if api.Order != 0 || data.Order.IsNull() || data.Order.IsUnknown() {
+		data.Order = types.Int64Value(api.Order)
+	}
+	if api.GroupOrder != 0 || data.GroupOrder.IsNull() || data.GroupOrder.IsUnknown() {
+		data.GroupOrder = types.Int64Value(api.GroupOrder)
+	}
 	if api.GroupID != "" {
 		data.GroupID = types.StringValue(api.GroupID)
 	}
