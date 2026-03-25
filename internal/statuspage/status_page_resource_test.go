@@ -6,18 +6,23 @@ import (
 	"testing"
 
 	"github.com/hashicorp/terraform-plugin-framework/diag"
-	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // --- RPC create request serialization ---
 
 func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 	req := apiRPCCreateRequest{
-		Title:       "My Page",
-		Slug:        "my-page",
-		Description: "A description",
-		HomepageURL: "https://example.com",
-		ContactURL:  "mailto:a@b.com",
+		Title:            "My Page",
+		Slug:             "my-page",
+		Description:      "A description",
+		HomepageURL:      "https://example.com",
+		ContactURL:       "mailto:a@b.com",
+		Icon:             "https://example.com/icon.png",
+		CustomDomain:     "status.example.com",
+		Theme:            "PAGE_THEME_DARK",
+		AccessType:       "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
+		Password:         "secret",
+		AuthEmailDomains: []string{"example.com", "test.com"},
 	}
 
 	data, err := json.Marshal(req)
@@ -36,69 +41,11 @@ func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 		"description": "A description",
 		"homepageUrl": "https://example.com",
 		"contactUrl":  "mailto:a@b.com",
-	}
-	for k, want := range expected {
-		got, ok := raw[k]
-		if !ok {
-			t.Errorf("field %q missing from JSON", k)
-			continue
-		}
-		if got != want {
-			t.Errorf("%s = %v, want %v", k, got, want)
-		}
-	}
-}
-
-func TestAPIRPCCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
-	req := apiRPCCreateRequest{
-		Title: "My Page",
-		Slug:  "my-page",
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	omitted := []string{"description", "homepageUrl", "contactUrl"}
-	for _, field := range omitted {
-		if _, ok := raw[field]; ok {
-			t.Errorf("field %q should be omitted when empty", field)
-		}
-	}
-}
-
-// --- REST update request serialization ---
-
-func TestAPIRESTUpdateRequest_AllFields(t *testing.T) {
-	req := apiRESTUpdateRequest{
-		Icon:             "https://example.com/icon.png",
-		CustomDomain:     "status.example.com",
-		AccessType:       "password",
-		Password:         "secret",
-		AuthEmailDomains: []string{"example.com", "test.com"},
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	expected := map[string]interface{}{
-		"icon":         "https://example.com/icon.png",
+		"icon":        "https://example.com/icon.png",
 		"customDomain": "status.example.com",
-		"accessType":   "password",
-		"password":     "secret",
+		"theme":       "PAGE_THEME_DARK",
+		"accessType":  "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
+		"password":    "secret",
 	}
 	for k, want := range expected {
 		got, ok := raw[k]
@@ -120,8 +67,11 @@ func TestAPIRESTUpdateRequest_AllFields(t *testing.T) {
 	}
 }
 
-func TestAPIRESTUpdateRequest_OmitsEmptyOptionalFields(t *testing.T) {
-	req := apiRESTUpdateRequest{}
+func TestAPIRPCCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
+	req := apiRPCCreateRequest{
+		Title: "My Page",
+		Slug:  "my-page",
+	}
 
 	data, err := json.Marshal(req)
 	if err != nil {
@@ -133,7 +83,7 @@ func TestAPIRESTUpdateRequest_OmitsEmptyOptionalFields(t *testing.T) {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	omitted := []string{"icon", "customDomain", "accessType", "password", "authEmailDomains"}
+	omitted := []string{"description", "homepageUrl", "contactUrl", "icon", "customDomain", "theme", "accessType", "password", "authEmailDomains"}
 	for _, field := range omitted {
 		if _, ok := raw[field]; ok {
 			t.Errorf("field %q should be omitted when empty", field)
@@ -141,66 +91,129 @@ func TestAPIRESTUpdateRequest_OmitsEmptyOptionalFields(t *testing.T) {
 	}
 }
 
-// --- REST response deserialization ---
+// --- RPC response deserialization ---
 
-func TestAPIRESTStatusPage_ParsesResponse(t *testing.T) {
+func TestAPIRPCStatusPage_ParsesResponse(t *testing.T) {
 	apiJSON := `{
-		"id": 4409,
-		"title": "Traefik Status",
-		"slug": "traefik",
-		"description": "Traefik services status page",
-		"icon": "https://traefik.io/favicon.png",
-		"customDomain": "",
-		"published": false,
-		"accessType": "public",
-		"password": "",
-		"authEmailDomains": [],
-		"theme": "",
-		"createdAt": "2026-03-24T00:00:00Z",
-		"updatedAt": "2026-03-24T00:00:00Z"
+		"statusPage": {
+			"id": "4409",
+			"title": "Traefik Status",
+			"slug": "traefik",
+			"description": "Traefik services status page",
+			"homepageUrl": "https://traefik.io",
+			"contactUrl": "mailto:support@traefik.io",
+			"icon": "https://traefik.io/favicon.png",
+			"customDomain": "",
+			"published": false,
+			"accessType": "PAGE_ACCESS_TYPE_PUBLIC",
+			"password": "",
+			"authEmailDomains": [],
+			"theme": "PAGE_THEME_SYSTEM",
+			"createdAt": "2026-03-24T00:00:00Z",
+			"updatedAt": "2026-03-24T00:00:00Z"
+		}
 	}`
 
-	var page apiRESTStatusPage
-	if err := json.Unmarshal([]byte(apiJSON), &page); err != nil {
+	var resp apiRPCResponse
+	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	if page.ID != 4409 {
-		t.Errorf("ID = %d, want 4409", page.ID)
+	page := resp.StatusPage
+	if page.ID != "4409" {
+		t.Errorf("ID = %q, want %q", page.ID, "4409")
 	}
 	if page.Title != "Traefik Status" {
 		t.Errorf("Title = %q, want %q", page.Title, "Traefik Status")
 	}
+	if page.HomepageURL != "https://traefik.io" {
+		t.Errorf("HomepageURL = %q, want %q", page.HomepageURL, "https://traefik.io")
+	}
 	if page.Icon != "https://traefik.io/favicon.png" {
 		t.Errorf("Icon = %q, want %q", page.Icon, "https://traefik.io/favicon.png")
 	}
-	if page.AccessType != "public" {
-		t.Errorf("AccessType = %q, want %q", page.AccessType, "public")
+	if page.AccessType != "PAGE_ACCESS_TYPE_PUBLIC" {
+		t.Errorf("AccessType = %q, want %q", page.AccessType, "PAGE_ACCESS_TYPE_PUBLIC")
+	}
+	if page.Theme != "PAGE_THEME_SYSTEM" {
+		t.Errorf("Theme = %q, want %q", page.Theme, "PAGE_THEME_SYSTEM")
 	}
 }
 
-// --- restAPIToModel ---
+// --- enum conversion helpers ---
 
-func TestRestAPIToModel_SetsAllFields(t *testing.T) {
-	api := apiRESTStatusPage{
-		ID:               42,
+func TestAccessTypeToProto(t *testing.T) {
+	cases := map[string]string{
+		"public":       "PAGE_ACCESS_TYPE_PUBLIC",
+		"password":     "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
+		"email-domain": "PAGE_ACCESS_TYPE_AUTHENTICATED",
+		"":             "",
+		"unknown":      "",
+	}
+	for tf, want := range cases {
+		got := accessTypeToProto(tf)
+		if got != want {
+			t.Errorf("accessTypeToProto(%q) = %q, want %q", tf, got, want)
+		}
+	}
+}
+
+func TestAccessTypeFromProto(t *testing.T) {
+	cases := map[string]string{
+		"PAGE_ACCESS_TYPE_PUBLIC":             "public",
+		"PAGE_ACCESS_TYPE_PASSWORD_PROTECTED": "password",
+		"PAGE_ACCESS_TYPE_AUTHENTICATED":      "email-domain",
+		"PAGE_ACCESS_TYPE_UNSPECIFIED":        "public",
+		"":                                    "public",
+	}
+	for proto, want := range cases {
+		got := accessTypeFromProto(proto)
+		if got != want {
+			t.Errorf("accessTypeFromProto(%q) = %q, want %q", proto, got, want)
+		}
+	}
+}
+
+func TestThemeFromProto(t *testing.T) {
+	cases := map[string]string{
+		"PAGE_THEME_SYSTEM":      "system",
+		"PAGE_THEME_LIGHT":       "light",
+		"PAGE_THEME_DARK":        "dark",
+		"PAGE_THEME_UNSPECIFIED": "system",
+		"":                       "system",
+	}
+	for proto, want := range cases {
+		got := themeFromProto(proto)
+		if got != want {
+			t.Errorf("themeFromProto(%q) = %q, want %q", proto, got, want)
+		}
+	}
+}
+
+// --- rpcAPIToModel ---
+
+func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
+	api := apiRPCStatusPage{
+		ID:               "42",
 		Title:            "Test",
 		Slug:             "test",
 		Description:      "desc",
+		HomepageURL:      "https://example.com",
+		ContactURL:       "mailto:a@b.com",
 		Icon:             "https://example.com/icon.png",
 		CustomDomain:     "status.example.com",
 		Published:        true,
-		AccessType:       "password",
+		AccessType:       "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
 		Password:         "secret",
 		AuthEmailDomains: []string{"example.com"},
-		Theme:            "dark",
+		Theme:            "PAGE_THEME_DARK",
 		CreatedAt:        "2026-01-01T00:00:00Z",
 		UpdatedAt:        "2026-01-02T00:00:00Z",
 	}
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	restAPIToModel(context.Background(), api, &data, &diags)
+	rpcAPIToModel(context.Background(), api, &data, &diags)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -210,6 +223,12 @@ func TestRestAPIToModel_SetsAllFields(t *testing.T) {
 	}
 	if data.Title.ValueString() != "Test" {
 		t.Errorf("Title = %q, want %q", data.Title.ValueString(), "Test")
+	}
+	if data.HomepageURL.ValueString() != "https://example.com" {
+		t.Errorf("HomepageURL = %q, want %q", data.HomepageURL.ValueString(), "https://example.com")
+	}
+	if data.ContactURL.ValueString() != "mailto:a@b.com" {
+		t.Errorf("ContactURL = %q, want %q", data.ContactURL.ValueString(), "mailto:a@b.com")
 	}
 	if data.Icon.ValueString() != "https://example.com/icon.png" {
 		t.Errorf("Icon = %q, want %q", data.Icon.ValueString(), "https://example.com/icon.png")
@@ -226,61 +245,63 @@ func TestRestAPIToModel_SetsAllFields(t *testing.T) {
 	if data.Password.ValueString() != "secret" {
 		t.Errorf("Password = %q, want %q", data.Password.ValueString(), "secret")
 	}
-}
-
-func TestRestAPIToModel_PreservesHomepageURLAndContactURL(t *testing.T) {
-	api := apiRESTStatusPage{
-		ID:         1,
-		Title:      "Test",
-		Slug:       "test",
-		AccessType: "public",
-	}
-
-	data := statusPageModel{
-		HomepageURL: types.StringValue("https://traefik.io"),
-		ContactURL:  types.StringValue("mailto:support@traefik.io"),
-	}
-
-	var diags diag.Diagnostics
-	restAPIToModel(context.Background(), api, &data, &diags)
-
-	if data.HomepageURL.ValueString() != "https://traefik.io" {
-		t.Errorf("HomepageURL = %q, want %q (should be preserved)", data.HomepageURL.ValueString(), "https://traefik.io")
-	}
-	if data.ContactURL.ValueString() != "mailto:support@traefik.io" {
-		t.Errorf("ContactURL = %q, want %q (should be preserved)", data.ContactURL.ValueString(), "mailto:support@traefik.io")
+	if data.Theme.ValueString() != "dark" {
+		t.Errorf("Theme = %q, want %q", data.Theme.ValueString(), "dark")
 	}
 }
 
-func TestRestAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
-	api := apiRESTStatusPage{
-		ID:         1,
+func TestRPCAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
+	api := apiRPCStatusPage{
+		ID:         "1",
 		Title:      "Test",
 		Slug:       "test",
-		AccessType: "public",
+		AccessType: "PAGE_ACCESS_TYPE_PUBLIC",
+		Theme:      "PAGE_THEME_SYSTEM",
 	}
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	restAPIToModel(context.Background(), api, &data, &diags)
+	rpcAPIToModel(context.Background(), api, &data, &diags)
 
 	if !data.Icon.IsNull() {
 		t.Errorf("Icon should remain null when API returns empty and model is null, got %q", data.Icon.ValueString())
 	}
 }
 
-func TestRestAPIToModel_AuthEmailDomains(t *testing.T) {
-	api := apiRESTStatusPage{
-		ID:               1,
-		Title:            "Test",
-		Slug:             "test",
-		AccessType:       "email-domain",
-		AuthEmailDomains: []string{"example.com", "test.com"},
+func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) {
+	api := apiRPCStatusPage{
+		ID:         "1",
+		Title:      "Test",
+		Slug:       "test",
+		AccessType: "PAGE_ACCESS_TYPE_PUBLIC",
+		Theme:      "PAGE_THEME_SYSTEM",
 	}
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	restAPIToModel(context.Background(), api, &data, &diags)
+	rpcAPIToModel(context.Background(), api, &data, &diags)
+
+	if !data.HomepageURL.IsNull() {
+		t.Errorf("HomepageURL should remain null when API returns empty and model is null, got %q", data.HomepageURL.ValueString())
+	}
+	if !data.ContactURL.IsNull() {
+		t.Errorf("ContactURL should remain null when API returns empty and model is null, got %q", data.ContactURL.ValueString())
+	}
+}
+
+func TestRPCAPIToModel_AuthEmailDomains(t *testing.T) {
+	api := apiRPCStatusPage{
+		ID:               "1",
+		Title:            "Test",
+		Slug:             "test",
+		AccessType:       "PAGE_ACCESS_TYPE_AUTHENTICATED",
+		AuthEmailDomains: []string{"example.com", "test.com"},
+		Theme:            "PAGE_THEME_SYSTEM",
+	}
+
+	var data statusPageModel
+	var diags diag.Diagnostics
+	rpcAPIToModel(context.Background(), api, &data, &diags)
 
 	if data.AuthEmailDomains.IsNull() {
 		t.Fatal("AuthEmailDomains should not be null")
@@ -291,82 +312,8 @@ func TestRestAPIToModel_AuthEmailDomains(t *testing.T) {
 	if len(domains) != 2 || domains[0] != "example.com" || domains[1] != "test.com" {
 		t.Errorf("AuthEmailDomains = %v, want [example.com, test.com]", domains)
 	}
-}
 
-// --- buildRESTUpdateRequest ---
-
-func TestBuildRESTUpdateRequest_ReturnsNilWhenNoRESTFields(t *testing.T) {
-	data := &statusPageModel{
-		Title:            types.StringValue("My Page"),
-		Slug:             types.StringValue("my-page"),
-		HomepageURL:      types.StringValue("https://example.com"),
-		ContactURL:       types.StringValue("mailto:a@b.com"),
-		AuthEmailDomains: types.ListNull(types.StringType),
-	}
-
-	var diags diag.Diagnostics
-	req := buildRESTUpdateRequest(data, context.Background(), &diags)
-
-	if diags.HasError() {
-		t.Fatalf("unexpected diagnostics: %v", diags)
-	}
-	if req != nil {
-		t.Error("expected nil when no REST-only fields are set")
-	}
-}
-
-func TestBuildRESTUpdateRequest_ReturnsRequestWhenIconSet(t *testing.T) {
-	data := &statusPageModel{
-		Icon:             types.StringValue("https://example.com/icon.png"),
-		AuthEmailDomains: types.ListNull(types.StringType),
-	}
-
-	var diags diag.Diagnostics
-	req := buildRESTUpdateRequest(data, context.Background(), &diags)
-
-	if diags.HasError() {
-		t.Fatalf("unexpected diagnostics: %v", diags)
-	}
-	if req == nil {
-		t.Fatal("expected non-nil request when icon is set")
-	}
-	if req.Icon != "https://example.com/icon.png" {
-		t.Errorf("Icon = %q, want %q", req.Icon, "https://example.com/icon.png")
-	}
-}
-
-func TestBuildRESTUpdateRequest_AllRESTFields(t *testing.T) {
-	domains, _ := types.ListValueFrom(context.Background(), types.StringType, []string{"example.com"})
-	data := &statusPageModel{
-		Icon:             types.StringValue("https://example.com/icon.png"),
-		CustomDomain:     types.StringValue("status.example.com"),
-		AccessType:       types.StringValue("email-domain"),
-		Password:         types.StringValue("secret"),
-		AuthEmailDomains: domains,
-	}
-
-	var diags diag.Diagnostics
-	req := buildRESTUpdateRequest(data, context.Background(), &diags)
-
-	if diags.HasError() {
-		t.Fatalf("unexpected diagnostics: %v", diags)
-	}
-	if req == nil {
-		t.Fatal("expected non-nil request")
-	}
-	if req.Icon != "https://example.com/icon.png" {
-		t.Errorf("Icon = %q, want %q", req.Icon, "https://example.com/icon.png")
-	}
-	if req.CustomDomain != "status.example.com" {
-		t.Errorf("CustomDomain = %q, want %q", req.CustomDomain, "status.example.com")
-	}
-	if req.AccessType != "email-domain" {
-		t.Errorf("AccessType = %q, want %q", req.AccessType, "email-domain")
-	}
-	if req.Password != "secret" {
-		t.Errorf("Password = %q, want %q", req.Password, "secret")
-	}
-	if len(req.AuthEmailDomains) != 1 || req.AuthEmailDomains[0] != "example.com" {
-		t.Errorf("AuthEmailDomains = %v, want [example.com]", req.AuthEmailDomains)
+	if data.AccessType.ValueString() != "email-domain" {
+		t.Errorf("AccessType = %q, want %q", data.AccessType.ValueString(), "email-domain")
 	}
 }

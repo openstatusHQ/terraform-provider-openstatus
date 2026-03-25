@@ -2,8 +2,6 @@ package statuspage
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
 	"terraform-provider-openstatus/internal/client"
 
@@ -137,11 +135,17 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 
 // apiRPCCreateRequest is sent to the RPC CreateStatusPage endpoint.
 type apiRPCCreateRequest struct {
-	Title       string `json:"title"`
-	Slug        string `json:"slug"`
-	Description string `json:"description,omitempty"`
-	HomepageURL string `json:"homepageUrl,omitempty"`
-	ContactURL  string `json:"contactUrl,omitempty"`
+	Title            string   `json:"title"`
+	Slug             string   `json:"slug"`
+	Description      string   `json:"description,omitempty"`
+	HomepageURL      string   `json:"homepageUrl,omitempty"`
+	ContactURL       string   `json:"contactUrl,omitempty"`
+	Icon             string   `json:"icon,omitempty"`
+	CustomDomain     string   `json:"customDomain,omitempty"`
+	Theme            string   `json:"theme,omitempty"`
+	AccessType       string   `json:"accessType,omitempty"`
+	Password         string   `json:"password,omitempty"`
+	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
 }
 
 // apiRPCResponse wraps the RPC response which nests the page under "statusPage".
@@ -149,26 +153,14 @@ type apiRPCResponse struct {
 	StatusPage apiRPCStatusPage `json:"statusPage"`
 }
 
-// apiRPCStatusPage is the page object returned by the RPC API (string ID).
+// apiRPCStatusPage is the page object returned by the RPC API.
 type apiRPCStatusPage struct {
-	ID string `json:"id"`
-}
-
-// apiRESTUpdateRequest is sent to the REST v1 PUT endpoint for fields not supported by RPC.
-type apiRESTUpdateRequest struct {
-	Icon             string   `json:"icon,omitempty"`
-	CustomDomain     string   `json:"customDomain,omitempty"`
-	AccessType       string   `json:"accessType,omitempty"`
-	Password         string   `json:"password,omitempty"`
-	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
-}
-
-// apiRESTStatusPage is the flat JSON response from the REST v1 API (numeric ID).
-type apiRESTStatusPage struct {
-	ID               int      `json:"id"`
+	ID               string   `json:"id"`
 	Title            string   `json:"title"`
 	Slug             string   `json:"slug"`
 	Description      string   `json:"description"`
+	HomepageURL      string   `json:"homepageUrl"`
+	ContactURL       string   `json:"contactUrl"`
 	Icon             string   `json:"icon"`
 	CustomDomain     string   `json:"customDomain"`
 	Published        bool     `json:"published"`
@@ -187,13 +179,25 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	// Step 1: Create via RPC (supports homepageUrl/contactUrl).
 	rpcReq := apiRPCCreateRequest{
 		Title:       data.Title.ValueString(),
 		Slug:        data.Slug.ValueString(),
 		Description: data.Description.ValueString(),
 		HomepageURL: data.HomepageURL.ValueString(),
 		ContactURL:  data.ContactURL.ValueString(),
+		Icon:        data.Icon.ValueString(),
+		CustomDomain: data.CustomDomain.ValueString(),
+		AccessType:  accessTypeToProto(data.AccessType.ValueString()),
+		Password:    data.Password.ValueString(),
+	}
+
+	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
+		var domains []string
+		resp.Diagnostics.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		rpcReq.AuthEmailDomains = domains
 	}
 
 	var rpcResp apiRPCResponse
@@ -204,33 +208,18 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	pageID := rpcResp.StatusPage.ID
-	// Save ID immediately so Terraform can track/delete the resource on retry.
 	data.ID = types.StringValue(pageID)
 
-	// Step 2: If REST-only fields are set, update via REST PUT.
-	restReq := buildRESTUpdateRequest(&data, ctx, &resp.Diagnostics)
-	if resp.Diagnostics.HasError() {
-		return
-	}
-	if restReq != nil {
-		err = r.client.DoREST(ctx, http.MethodPut, fmt.Sprintf("/page/%s", pageID), restReq, nil)
-		if err != nil {
-			// Save partial state so the resource can be cleaned up.
-			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
-			resp.Diagnostics.AddError("Error updating status page (REST)", err.Error())
-			return
-		}
-	}
-
-	// Step 3: Read back full state via REST.
-	var apiResp apiRESTStatusPage
-	err = r.client.DoREST(ctx, http.MethodGet, fmt.Sprintf("/page/%s", pageID), nil, &apiResp)
+	// Read back full state via RPC.
+	var readResp apiRPCResponse
+	err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
+		map[string]string{"id": pageID}, &readResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page after create", err.Error())
 		return
 	}
 
-	restAPIToModel(ctx, apiResp, &data, &resp.Diagnostics)
+	rpcAPIToModel(ctx, readResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -241,8 +230,9 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var apiResp apiRESTStatusPage
-	err := r.client.DoREST(ctx, http.MethodGet, fmt.Sprintf("/page/%s", data.ID.ValueString()), nil, &apiResp)
+	var rpcResp apiRPCResponse
+	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
+		map[string]string{"id": data.ID.ValueString()}, &rpcResp)
 	if err != nil {
 		if isNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -252,7 +242,7 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	restAPIToModel(ctx, apiResp, &data, &resp.Diagnostics)
+	rpcAPIToModel(ctx, rpcResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -278,39 +268,62 @@ func (r *statusPageResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-// buildRESTUpdateRequest returns a REST update request for fields not supported by the RPC API.
-// Returns nil if no REST-only fields are set.
-func buildRESTUpdateRequest(data *statusPageModel, ctx context.Context, diags *diag.Diagnostics) *apiRESTUpdateRequest {
-	req := &apiRESTUpdateRequest{
-		Icon:         data.Icon.ValueString(),
-		CustomDomain: data.CustomDomain.ValueString(),
-		AccessType:   data.AccessType.ValueString(),
-		Password:     data.Password.ValueString(),
+// accessTypeToProto converts a Terraform access_type value to the proto enum string.
+func accessTypeToProto(tf string) string {
+	switch tf {
+	case "public":
+		return "PAGE_ACCESS_TYPE_PUBLIC"
+	case "password":
+		return "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED"
+	case "email-domain":
+		return "PAGE_ACCESS_TYPE_AUTHENTICATED"
+	default:
+		return ""
 	}
-
-	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
-		var domains []string
-		diags.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
-		req.AuthEmailDomains = domains
-	}
-
-	// Only return the request if at least one field is set.
-	if req.Icon == "" && req.CustomDomain == "" && req.AccessType == "" && req.Password == "" && req.AuthEmailDomains == nil {
-		return nil
-	}
-	return req
 }
 
-// restAPIToModel maps a REST v1 API response to the Terraform model.
-// Fields not returned by the REST API (homepageUrl, contactUrl) are preserved from the existing model.
-func restAPIToModel(ctx context.Context, api apiRESTStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
-	data.ID = types.StringValue(fmt.Sprintf("%d", api.ID))
+// accessTypeFromProto converts a proto enum string to the Terraform access_type value.
+func accessTypeFromProto(proto string) string {
+	switch proto {
+	case "PAGE_ACCESS_TYPE_PUBLIC":
+		return "public"
+	case "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED":
+		return "password"
+	case "PAGE_ACCESS_TYPE_AUTHENTICATED":
+		return "email-domain"
+	default:
+		return "public"
+	}
+}
+
+// themeFromProto converts a proto theme enum string to a friendly Terraform value.
+func themeFromProto(proto string) string {
+	switch proto {
+	case "PAGE_THEME_SYSTEM":
+		return "system"
+	case "PAGE_THEME_LIGHT":
+		return "light"
+	case "PAGE_THEME_DARK":
+		return "dark"
+	default:
+		return "system"
+	}
+}
+
+// rpcAPIToModel maps an RPC API response to the Terraform model.
+func rpcAPIToModel(ctx context.Context, api apiRPCStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
+	data.ID = types.StringValue(api.ID)
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
 	if api.Description != "" || !data.Description.IsNull() {
 		data.Description = types.StringValue(api.Description)
 	}
-	// homepageUrl and contactUrl are not returned by the REST API — preserve from state.
+	if api.HomepageURL != "" || !data.HomepageURL.IsNull() {
+		data.HomepageURL = types.StringValue(api.HomepageURL)
+	}
+	if api.ContactURL != "" || !data.ContactURL.IsNull() {
+		data.ContactURL = types.StringValue(api.ContactURL)
+	}
 	if api.Icon != "" || !data.Icon.IsNull() {
 		data.Icon = types.StringValue(api.Icon)
 	}
@@ -318,7 +331,7 @@ func restAPIToModel(ctx context.Context, api apiRESTStatusPage, data *statusPage
 		data.CustomDomain = types.StringValue(api.CustomDomain)
 	}
 	data.Published = types.BoolValue(api.Published)
-	data.AccessType = types.StringValue(api.AccessType)
+	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
 	if api.Password != "" || !data.Password.IsNull() {
 		data.Password = types.StringValue(api.Password)
 	}
@@ -327,7 +340,7 @@ func restAPIToModel(ctx context.Context, api apiRESTStatusPage, data *statusPage
 		diags.Append(listDiags...)
 		data.AuthEmailDomains = list
 	}
-	data.Theme = types.StringValue(api.Theme)
+	data.Theme = types.StringValue(themeFromProto(api.Theme))
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 }
@@ -338,4 +351,3 @@ func isNotFound(err error) bool {
 	}
 	return false
 }
-

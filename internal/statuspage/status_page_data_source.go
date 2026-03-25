@@ -2,8 +2,6 @@ package statuspage
 
 import (
 	"context"
-	"fmt"
-	"net/http"
 
 	"terraform-provider-openstatus/internal/client"
 
@@ -80,26 +78,28 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	var api apiRESTStatusPage
-	err := d.client.DoREST(ctx, http.MethodGet, fmt.Sprintf("/page/%s", data.ID.ValueString()), nil, &api)
+	var rpcResp apiRPCResponse
+	err := d.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
+		map[string]string{"id": data.ID.ValueString()}, &rpcResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page", err.Error())
 		return
 	}
 
-	data.ID = types.StringValue(fmt.Sprintf("%d", api.ID))
+	api := rpcResp.StatusPage
+	data.ID = types.StringValue(api.ID)
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
 	data.Description = types.StringValue(api.Description)
 	data.Icon = types.StringValue(api.Icon)
 	data.CustomDomain = types.StringValue(api.CustomDomain)
 	data.Published = types.BoolValue(api.Published)
-	data.AccessType = types.StringValue(api.AccessType)
+	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
 	data.Password = types.StringValue(api.Password)
 	list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
 	resp.Diagnostics.Append(listDiags...)
 	data.AuthEmailDomains = list
-	data.Theme = types.StringValue(api.Theme)
+	data.Theme = types.StringValue(themeFromProto(api.Theme))
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 
