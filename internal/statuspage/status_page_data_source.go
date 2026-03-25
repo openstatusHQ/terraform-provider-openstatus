@@ -28,6 +28,8 @@ type statusPageDataSourceModel struct {
 	Title            types.String `tfsdk:"title"`
 	Slug             types.String `tfsdk:"slug"`
 	Description      types.String `tfsdk:"description"`
+	HomepageURL      types.String `tfsdk:"homepage_url"`
+	ContactURL       types.String `tfsdk:"contact_url"`
 	Icon             types.String `tfsdk:"icon"`
 	CustomDomain     types.String `tfsdk:"custom_domain"`
 	Published        types.Bool   `tfsdk:"published"`
@@ -58,6 +60,8 @@ func (d *statusPageDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			"title":              schema.StringAttribute{Computed: true},
 			"slug":               schema.StringAttribute{Computed: true},
 			"description":        schema.StringAttribute{Computed: true},
+			"homepage_url":       schema.StringAttribute{Computed: true},
+			"contact_url":        schema.StringAttribute{Computed: true},
 			"icon":               schema.StringAttribute{Computed: true},
 			"custom_domain":      schema.StringAttribute{Computed: true},
 			"published":          schema.BoolAttribute{Computed: true},
@@ -91,6 +95,8 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
 	data.Description = types.StringValue(api.Description)
+	data.HomepageURL = types.StringValue(api.HomepageURL)
+	data.ContactURL = types.StringValue(api.ContactURL)
 	data.Icon = types.StringValue(api.Icon)
 	data.CustomDomain = types.StringValue(api.CustomDomain)
 	data.Published = types.BoolValue(api.Published)
