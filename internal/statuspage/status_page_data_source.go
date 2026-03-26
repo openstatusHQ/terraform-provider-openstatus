@@ -82,15 +82,15 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	var rpcResp apiStatusPageResponse
+	var apiResp apiStatusPageResponse
 	err := d.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, &rpcResp)
+		map[string]string{"id": data.ID.ValueString()}, &apiResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page", err.Error())
 		return
 	}
 
-	api := rpcResp.StatusPage
+	api := apiResp.StatusPage
 	data.ID = types.StringValue(api.ID)
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
