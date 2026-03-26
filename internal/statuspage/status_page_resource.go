@@ -324,21 +324,29 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 	if api.ContactURL != "" || !data.ContactURL.IsNull() {
 		data.ContactURL = types.StringValue(api.ContactURL)
 	}
-	if api.Icon != "" || !data.Icon.IsNull() {
+	if api.Icon != "" {
 		data.Icon = types.StringValue(api.Icon)
+	} else if data.Icon.IsUnknown() {
+		data.Icon = types.StringNull()
 	}
-	if api.CustomDomain != "" || !data.CustomDomain.IsNull() {
+	if api.CustomDomain != "" {
 		data.CustomDomain = types.StringValue(api.CustomDomain)
+	} else if data.CustomDomain.IsUnknown() {
+		data.CustomDomain = types.StringNull()
 	}
 	data.Published = types.BoolValue(api.Published)
 	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
 	if api.Password != "" {
 		data.Password = types.StringValue(api.Password)
+	} else if data.Password.IsUnknown() {
+		data.Password = types.StringNull()
 	}
-	if len(api.AuthEmailDomains) > 0 || !data.AuthEmailDomains.IsNull() {
+	if len(api.AuthEmailDomains) > 0 {
 		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
 		diags.Append(listDiags...)
 		data.AuthEmailDomains = list
+	} else if data.AuthEmailDomains.IsUnknown() {
+		data.AuthEmailDomains = types.ListNull(types.StringType)
 	}
 	data.Theme = types.StringValue(themeFromProto(api.Theme))
 	data.CreatedAt = types.StringValue(api.CreatedAt)
