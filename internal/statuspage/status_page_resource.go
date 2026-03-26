@@ -6,9 +6,11 @@ import (
 	"terraform-provider-openstatus/internal/client"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -32,18 +34,21 @@ type statusPageResource struct {
 }
 
 type statusPageModel struct {
-	ID           types.String `tfsdk:"id"`
-	Title        types.String `tfsdk:"title"`
-	Slug         types.String `tfsdk:"slug"`
-	Description  types.String `tfsdk:"description"`
-	HomepageURL  types.String `tfsdk:"homepage_url"`
-	ContactURL   types.String `tfsdk:"contact_url"`
-	CustomDomain types.String `tfsdk:"custom_domain"`
-	Published    types.Bool   `tfsdk:"published"`
-	AccessType   types.String `tfsdk:"access_type"`
-	Theme        types.String `tfsdk:"theme"`
-	CreatedAt    types.String `tfsdk:"created_at"`
-	UpdatedAt    types.String `tfsdk:"updated_at"`
+	ID               types.String `tfsdk:"id"`
+	Title            types.String `tfsdk:"title"`
+	Slug             types.String `tfsdk:"slug"`
+	Description      types.String `tfsdk:"description"`
+	HomepageURL      types.String `tfsdk:"homepage_url"`
+	ContactURL       types.String `tfsdk:"contact_url"`
+	Icon             types.String `tfsdk:"icon"`
+	CustomDomain     types.String `tfsdk:"custom_domain"`
+	AccessType       types.String `tfsdk:"access_type"`
+	Password         types.String `tfsdk:"password"`
+	AuthEmailDomains types.List   `tfsdk:"auth_email_domains"`
+	Published        types.Bool   `tfsdk:"published"`
+	Theme            types.String `tfsdk:"theme"`
+	CreatedAt        types.String `tfsdk:"created_at"`
+	UpdatedAt        types.String `tfsdk:"updated_at"`
 }
 
 func (r *statusPageResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -59,9 +64,10 @@ func (r *statusPageResource) Configure(_ context.Context, req resource.Configure
 
 func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	requiresReplace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
+	requiresReplaceKeepState := []planmodifier.String{stringplanmodifier.RequiresReplace(), stringplanmodifier.UseStateForUnknown()}
 
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a status page. Note: the API does not support updates, so any change to mutable attributes will destroy and recreate the resource.",
+		MarkdownDescription: "Manages a status page. Any change to mutable attributes will destroy and recreate the resource.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
@@ -90,10 +96,41 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:      true,
 				PlanModifiers: requiresReplace,
 			},
-			"custom_domain": schema.StringAttribute{Computed: true},
-			"published":     schema.BoolAttribute{Computed: true},
-			"access_type":   schema.StringAttribute{Computed: true},
-			"theme":         schema.StringAttribute{Computed: true},
+			"icon": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "URL of the icon to display on the status page.",
+				PlanModifiers:       requiresReplaceKeepState,
+			},
+			"custom_domain": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Custom domain for the status page. DNS must point to OpenStatus before setting this.",
+				PlanModifiers:       requiresReplaceKeepState,
+			},
+			"access_type": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`.",
+				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain")},
+				PlanModifiers:       requiresReplaceKeepState,
+			},
+			"password": schema.StringAttribute{
+				Optional:            true,
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "Password to protect the status page. Required when `access_type` is `password`.",
+				PlanModifiers:       requiresReplaceKeepState,
+			},
+			"auth_email_domains": schema.ListAttribute{
+				Optional:            true,
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "List of email domains allowed to access the page. Used when `access_type` is `email-domain`.",
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace(), listplanmodifier.UseStateForUnknown()},
+			},
+			"published": schema.BoolAttribute{Computed: true},
+			"theme":     schema.StringAttribute{Computed: true},
 			"created_at":    schema.StringAttribute{Computed: true},
 			"updated_at":    schema.StringAttribute{Computed: true},
 		},
@@ -101,11 +138,17 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 }
 
 type apiStatusPageCreateRequest struct {
-	Title       string `json:"title"`
-	Slug        string `json:"slug"`
-	Description string `json:"description,omitempty"`
-	HomepageURL string `json:"homepageUrl,omitempty"`
-	ContactURL  string `json:"contactUrl,omitempty"`
+	Title            string   `json:"title"`
+	Slug             string   `json:"slug"`
+	Description      string   `json:"description,omitempty"`
+	HomepageURL      string   `json:"homepageUrl,omitempty"`
+	ContactURL       string   `json:"contactUrl,omitempty"`
+	Icon             string   `json:"icon,omitempty"`
+	CustomDomain     string   `json:"customDomain,omitempty"`
+	Theme            string   `json:"theme,omitempty"`
+	AccessType       string   `json:"accessType,omitempty"`
+	Password         string   `json:"password,omitempty"`
+	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
 }
 
 type apiStatusPageResponse struct {
@@ -113,18 +156,21 @@ type apiStatusPageResponse struct {
 }
 
 type apiStatusPage struct {
-	ID           string `json:"id"`
-	Title        string `json:"title"`
-	Slug         string `json:"slug"`
-	Description  string `json:"description"`
-	HomepageURL  string `json:"homepageUrl"`
-	ContactURL   string `json:"contactUrl"`
-	CustomDomain string `json:"customDomain"`
-	Published    bool   `json:"published"`
-	AccessType   string `json:"accessType"`
-	Theme        string `json:"theme"`
-	CreatedAt    string `json:"createdAt"`
-	UpdatedAt    string `json:"updatedAt"`
+	ID               string   `json:"id"`
+	Title            string   `json:"title"`
+	Slug             string   `json:"slug"`
+	Description      string   `json:"description"`
+	HomepageURL      string   `json:"homepageUrl"`
+	ContactURL       string   `json:"contactUrl"`
+	Icon             string   `json:"icon"`
+	CustomDomain     string   `json:"customDomain"`
+	Published        bool     `json:"published"`
+	AccessType       string   `json:"accessType"`
+	Password         string   `json:"password"`
+	AuthEmailDomains []string `json:"authEmailDomains"`
+	Theme            string   `json:"theme"`
+	CreatedAt        string   `json:"createdAt"`
+	UpdatedAt        string   `json:"updatedAt"`
 }
 
 func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -140,6 +186,19 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		Description: data.Description.ValueString(),
 		HomepageURL: data.HomepageURL.ValueString(),
 		ContactURL:  data.ContactURL.ValueString(),
+		Icon:        data.Icon.ValueString(),
+		CustomDomain: data.CustomDomain.ValueString(),
+		AccessType:  accessTypeToProto(data.AccessType.ValueString()),
+		Password:    data.Password.ValueString(),
+	}
+
+	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
+		var domains []string
+		resp.Diagnostics.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		apiReq.AuthEmailDomains = domains
 	}
 
 	var apiResp apiStatusPageResponse
@@ -149,7 +208,18 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	statusPageAPIToModel(apiResp.StatusPage, &data)
+	pageID := apiResp.StatusPage.ID
+	data.ID = types.StringValue(pageID)
+
+	// Read back full state.
+	err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
+		map[string]string{"id": pageID}, &apiResp)
+	if err != nil {
+		resp.Diagnostics.AddError("Error reading status page after create", err.Error())
+		return
+	}
+
+	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -172,7 +242,7 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	statusPageAPIToModel(apiResp.StatusPage, &data)
+	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -198,7 +268,50 @@ func (r *statusPageResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-func statusPageAPIToModel(api apiStatusPage, data *statusPageModel) {
+// accessTypeToProto converts a Terraform access_type value to the proto enum string.
+func accessTypeToProto(tf string) string {
+	switch tf {
+	case "public":
+		return "PAGE_ACCESS_TYPE_PUBLIC"
+	case "password":
+		return "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED"
+	case "email-domain":
+		return "PAGE_ACCESS_TYPE_AUTHENTICATED"
+	default:
+		return ""
+	}
+}
+
+// accessTypeFromProto converts a proto enum string to the Terraform access_type value.
+func accessTypeFromProto(proto string) string {
+	switch proto {
+	case "PAGE_ACCESS_TYPE_PUBLIC":
+		return "public"
+	case "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED":
+		return "password"
+	case "PAGE_ACCESS_TYPE_AUTHENTICATED":
+		return "email-domain"
+	default:
+		return "public"
+	}
+}
+
+// themeFromProto converts a proto theme enum string to a friendly Terraform value.
+func themeFromProto(proto string) string {
+	switch proto {
+	case "PAGE_THEME_SYSTEM":
+		return "system"
+	case "PAGE_THEME_LIGHT":
+		return "light"
+	case "PAGE_THEME_DARK":
+		return "dark"
+	default:
+		return "system"
+	}
+}
+
+// statusPageAPIToModel maps an API response to the Terraform model.
+func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
 	data.ID = types.StringValue(api.ID)
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)
@@ -211,10 +324,31 @@ func statusPageAPIToModel(api apiStatusPage, data *statusPageModel) {
 	if api.ContactURL != "" || !data.ContactURL.IsNull() {
 		data.ContactURL = types.StringValue(api.ContactURL)
 	}
-	data.CustomDomain = types.StringValue(api.CustomDomain)
+	if api.Icon != "" {
+		data.Icon = types.StringValue(api.Icon)
+	} else if data.Icon.IsUnknown() {
+		data.Icon = types.StringNull()
+	}
+	if api.CustomDomain != "" {
+		data.CustomDomain = types.StringValue(api.CustomDomain)
+	} else if data.CustomDomain.IsUnknown() {
+		data.CustomDomain = types.StringNull()
+	}
 	data.Published = types.BoolValue(api.Published)
-	data.AccessType = types.StringValue(api.AccessType)
-	data.Theme = types.StringValue(api.Theme)
+	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
+	if api.Password != "" {
+		data.Password = types.StringValue(api.Password)
+	} else if data.Password.IsUnknown() {
+		data.Password = types.StringNull()
+	}
+	if len(api.AuthEmailDomains) > 0 {
+		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
+		diags.Append(listDiags...)
+		data.AuthEmailDomains = list
+	} else if data.AuthEmailDomains.IsUnknown() {
+		data.AuthEmailDomains = types.ListNull(types.StringType)
+	}
+	data.Theme = types.StringValue(themeFromProto(api.Theme))
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 }
@@ -225,4 +359,3 @@ func isNotFound(err error) bool {
 	}
 	return false
 }
-

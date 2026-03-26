@@ -3,6 +3,8 @@ package statuspage
 import (
 	"encoding/json"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 func ptr[T any](v T) *T { return &v }
@@ -109,11 +111,11 @@ func TestAPIComponent_GroupOrderParsed(t *testing.T) {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	if comp.GroupOrder != 3 {
-		t.Errorf("GroupOrder = %d, want 3", comp.GroupOrder)
+	if comp.GroupOrder == nil || *comp.GroupOrder != 3 {
+		t.Errorf("GroupOrder = %v, want 3", comp.GroupOrder)
 	}
-	if comp.Order != 0 {
-		t.Errorf("Order = %d, want 0", comp.Order)
+	if comp.Order == nil || *comp.Order != 0 {
+		t.Errorf("Order = %v, want 0", comp.Order)
 	}
 }
 
@@ -166,12 +168,12 @@ func TestComponentAPIToModel_SetsGroupOrder(t *testing.T) {
 	api := apiComponent{
 		ID:         "1",
 		PageID:     "2",
-		Name:       "Hub UI",
+		Name:       "Acme API",
 		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
 		MonitorID:  "42",
-		Order:      0,
+		Order:      ptr(int64(0)),
 		GroupID:    "10",
-		GroupOrder: 3,
+		GroupOrder: ptr(int64(3)),
 		CreatedAt:  "2026-03-23T00:00:00Z",
 		UpdatedAt:  "2026-03-23T00:00:00Z",
 	}
@@ -184,5 +186,91 @@ func TestComponentAPIToModel_SetsGroupOrder(t *testing.T) {
 	}
 	if data.Order.ValueInt64() != 0 {
 		t.Errorf("Order = %d, want 0", data.Order.ValueInt64())
+	}
+}
+
+func TestComponentAPIToModel_PreservesOrderWhenAPIOmitsFields(t *testing.T) {
+	api := apiComponent{
+		ID:        "1",
+		PageID:    "2",
+		Name:      "Acme API",
+		Type:      "PAGE_COMPONENT_TYPE_MONITOR",
+		MonitorID: "42",
+		GroupID:   "10",
+		CreatedAt: "2026-03-23T00:00:00Z",
+		UpdatedAt: "2026-03-23T00:00:00Z",
+		// Order and GroupOrder are nil (omitted by API)
+	}
+
+	data := componentModel{
+		Order:      types.Int64Value(1),
+		GroupOrder: types.Int64Value(3),
+	}
+
+	componentAPIToModel(api, &data)
+
+	if data.GroupOrder.ValueInt64() != 3 {
+		t.Errorf("GroupOrder = %d, want 3 (should be preserved when API omits field)", data.GroupOrder.ValueInt64())
+	}
+	if data.Order.ValueInt64() != 1 {
+		t.Errorf("Order = %d, want 1 (should be preserved when API omits field)", data.Order.ValueInt64())
+	}
+}
+
+func TestComponentAPIToModel_SetsExplicitZero(t *testing.T) {
+	api := apiComponent{
+		ID:         "1",
+		PageID:     "2",
+		Name:       "Acme API",
+		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
+		MonitorID:  "42",
+		Order:      ptr(int64(0)),
+		GroupID:    "10",
+		GroupOrder: ptr(int64(0)),
+		CreatedAt:  "2026-03-23T00:00:00Z",
+		UpdatedAt:  "2026-03-23T00:00:00Z",
+	}
+
+	data := componentModel{
+		Order:      types.Int64Value(1),
+		GroupOrder: types.Int64Value(3),
+	}
+
+	componentAPIToModel(api, &data)
+
+	if data.GroupOrder.ValueInt64() != 0 {
+		t.Errorf("GroupOrder = %d, want 0 (explicit zero from API)", data.GroupOrder.ValueInt64())
+	}
+	if data.Order.ValueInt64() != 0 {
+		t.Errorf("Order = %d, want 0 (explicit zero from API)", data.Order.ValueInt64())
+	}
+}
+
+func TestComponentAPIToModel_OverwritesGroupOrderWhenAPIReturnsNonZero(t *testing.T) {
+	api := apiComponent{
+		ID:         "1",
+		PageID:     "2",
+		Name:       "Acme API",
+		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
+		MonitorID:  "42",
+		Order:      ptr(int64(5)),
+		GroupID:    "10",
+		GroupOrder: ptr(int64(7)),
+		CreatedAt:  "2026-03-23T00:00:00Z",
+		UpdatedAt:  "2026-03-23T00:00:00Z",
+	}
+
+	data := componentModel{
+		Order:      types.Int64Value(1),
+		GroupOrder: types.Int64Value(3),
+	}
+
+	componentAPIToModel(api, &data)
+
+	if data.GroupOrder.ValueInt64() != 7 {
+		t.Errorf("GroupOrder = %d, want 7", data.GroupOrder.ValueInt64())
+	}
+	if data.Order.ValueInt64() != 5 {
+		t.Errorf("Order = %d, want 5", data.Order.ValueInt64())
 	}
 }
