@@ -17,9 +17,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*statusPageResource)(nil)
-	_ resource.ResourceWithConfigure   = (*statusPageResource)(nil)
-	_ resource.ResourceWithImportState = (*statusPageResource)(nil)
+	_ resource.Resource                   = (*statusPageResource)(nil)
+	_ resource.ResourceWithConfigure      = (*statusPageResource)(nil)
+	_ resource.ResourceWithImportState    = (*statusPageResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*statusPageResource)(nil)
 )
 
 type providerConfig = client.ProviderConfig
@@ -119,6 +120,47 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"created_at":    schema.StringAttribute{Computed: true},
 			"updated_at":    schema.StringAttribute{Computed: true},
 		},
+	}
+}
+
+func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data statusPageModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	accessType := data.AccessType.ValueString()
+	hasPassword := !data.Password.IsNull() && !data.Password.IsUnknown()
+	hasEmailDomains := !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown()
+
+	if accessType == "password" && !hasPassword {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("password"),
+			"Missing required attribute",
+			"password is required when access_type is \"password\".",
+		)
+	}
+	if accessType == "email-domain" && !hasEmailDomains {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("auth_email_domains"),
+			"Missing required attribute",
+			"auth_email_domains is required when access_type is \"email-domain\".",
+		)
+	}
+	if hasPassword && accessType != "password" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("password"),
+			"Invalid attribute combination",
+			"password can only be set when access_type is \"password\".",
+		)
+	}
+	if hasEmailDomains && accessType != "email-domain" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("auth_email_domains"),
+			"Invalid attribute combination",
+			"auth_email_domains can only be set when access_type is \"email-domain\".",
+		)
 	}
 }
 
