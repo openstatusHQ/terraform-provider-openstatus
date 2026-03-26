@@ -31,6 +31,10 @@ resource "openstatus_http_monitor" "api" {
 }
 ```
 
+## Documentation
+
+Full documentation is available on the [Terraform Registry](https://registry.terraform.io/providers/openstatusHQ/openstatus/latest/docs).
+
 ## Resources
 
 - `openstatus_http_monitor` — HTTP monitors with assertions
