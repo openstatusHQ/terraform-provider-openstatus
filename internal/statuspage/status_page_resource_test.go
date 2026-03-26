@@ -317,3 +317,103 @@ func TestStatusPageAPIToModel_AuthEmailDomains(t *testing.T) {
 		t.Errorf("AccessType = %q, want %q", data.AccessType.ValueString(), "email-domain")
 	}
 }
+
+// --- Update request serialization ---
+
+func TestAPIStatusPageUpdateRequest_AllFields(t *testing.T) {
+	title := "Acme Corp Status"
+	slug := "acme-corp"
+	desc := "Updated description"
+	homepage := "https://acme.example.com"
+	contact := "mailto:support@acme.example.com"
+	icon := "https://acme.example.com/icon.png"
+	domain := "status.acme.example.com"
+	access := "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED"
+	pass := "secret"
+
+	req := apiStatusPageUpdateRequest{
+		ID:               "42",
+		Title:            &title,
+		Slug:             &slug,
+		Description:      &desc,
+		HomepageURL:      &homepage,
+		ContactURL:       &contact,
+		Icon:             &icon,
+		CustomDomain:     &domain,
+		AccessType:       &access,
+		Password:         &pass,
+		AuthEmailDomains: []string{"acme.example.com"},
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+
+	if raw["id"] != "42" {
+		t.Errorf("id = %v, want 42", raw["id"])
+	}
+	if raw["title"] != "Acme Corp Status" {
+		t.Errorf("title = %v, want Acme Corp Status", raw["title"])
+	}
+	if raw["password"] != "secret" {
+		t.Errorf("password = %v, want secret", raw["password"])
+	}
+}
+
+func TestAPIStatusPageUpdateRequest_OmitsNilFields(t *testing.T) {
+	title := "Acme Corp Status"
+	req := apiStatusPageUpdateRequest{
+		ID:    "42",
+		Title: &title,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+
+	omitted := []string{"slug", "description", "homepageUrl", "contactUrl", "icon", "customDomain", "accessType", "password", "authEmailDomains"}
+	for _, field := range omitted {
+		if _, ok := raw[field]; ok {
+			t.Errorf("field %q should be omitted when nil", field)
+		}
+	}
+}
+
+func TestAPIStatusPageUpdateRequest_EmptyStringClearsField(t *testing.T) {
+	empty := ""
+	req := apiStatusPageUpdateRequest{
+		ID:          "42",
+		ContactURL:  &empty,
+		HomepageURL: &empty,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+
+	// Empty strings should be present (not omitted) to clear the field server-side.
+	if _, ok := raw["contactUrl"]; !ok {
+		t.Error("contactUrl should be present with empty string to clear it")
+	}
+	if _, ok := raw["homepageUrl"]; !ok {
+		t.Error("homepageUrl should be present with empty string to clear it")
+	}
+}
