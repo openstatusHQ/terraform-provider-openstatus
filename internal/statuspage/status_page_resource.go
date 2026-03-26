@@ -64,6 +64,7 @@ func (r *statusPageResource) Configure(_ context.Context, req resource.Configure
 
 func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
 	requiresReplace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
+	requiresReplaceKeepState := []planmodifier.String{stringplanmodifier.RequiresReplace(), stringplanmodifier.UseStateForUnknown()}
 
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Manages a status page. Any change to mutable attributes will destroy and recreate the resource.",
@@ -99,34 +100,34 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "URL of the icon to display on the status page.",
-				PlanModifiers:       requiresReplace,
+				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"custom_domain": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Custom domain for the status page. DNS must point to OpenStatus before setting this.",
-				PlanModifiers:       requiresReplace,
+				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"access_type": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`.",
 				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain")},
-				PlanModifiers:       requiresReplace,
+				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"password": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				Sensitive:           true,
 				MarkdownDescription: "Password to protect the status page. Required when `access_type` is `password`.",
-				PlanModifiers:       requiresReplace,
+				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"auth_email_domains": schema.ListAttribute{
 				Optional:            true,
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "List of email domains allowed to access the page. Used when `access_type` is `email-domain`.",
-				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace()},
+				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace(), listplanmodifier.UseStateForUnknown()},
 			},
 			"published": schema.BoolAttribute{Computed: true},
 			"theme":     schema.StringAttribute{Computed: true},
@@ -331,7 +332,7 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 	}
 	data.Published = types.BoolValue(api.Published)
 	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
-	if api.Password != "" || !data.Password.IsNull() {
+	if api.Password != "" {
 		data.Password = types.StringValue(api.Password)
 	}
 	if len(api.AuthEmailDomains) > 0 || !data.AuthEmailDomains.IsNull() {

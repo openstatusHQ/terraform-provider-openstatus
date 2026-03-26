@@ -51,8 +51,9 @@ resource "openstatus_http_monitor" "api" {
 ## Development
 
 ```sh
-make build      # build the provider
-make test       # run unit tests
-make testacc    # run acceptance tests (not implemented yet)
-make install    # install to local plugin directory
+just build      # build the provider
+just test       # run unit tests
+just testacc    # run acceptance tests (requires OPENSTATUS_API_TOKEN)
+just install    # install to local plugin directory
+just lint       # run golangci-lint
 ```
