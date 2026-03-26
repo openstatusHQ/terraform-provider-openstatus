@@ -168,7 +168,7 @@ func TestComponentAPIToModel_SetsGroupOrder(t *testing.T) {
 	api := apiComponent{
 		ID:         "1",
 		PageID:     "2",
-		Name:       "Hub UI",
+		Name:       "Acme API",
 		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
 		MonitorID:  "42",
 		Order:      0,
@@ -193,7 +193,7 @@ func TestComponentAPIToModel_PreservesGroupOrderWhenAPIReturnsZero(t *testing.T)
 	api := apiComponent{
 		ID:         "1",
 		PageID:     "2",
-		Name:       "Hub UI",
+		Name:       "Acme API",
 		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
 		MonitorID:  "42",
 		Order:      0,
