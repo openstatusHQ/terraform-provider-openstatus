@@ -10,7 +10,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
-	"github.com/hashicorp/terraform-plugin-framework/resource/schema/listplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -63,71 +62,57 @@ func (r *statusPageResource) Configure(_ context.Context, req resource.Configure
 }
 
 func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest, resp *resource.SchemaResponse) {
-	requiresReplace := []planmodifier.String{stringplanmodifier.RequiresReplace()}
-	requiresReplaceKeepState := []planmodifier.String{stringplanmodifier.RequiresReplace(), stringplanmodifier.UseStateForUnknown()}
+	keepState := []planmodifier.String{stringplanmodifier.UseStateForUnknown()}
 
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages a status page. Any change to mutable attributes will destroy and recreate the resource.",
+		MarkdownDescription: "Manages a status page.",
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				Computed:      true,
-				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+				PlanModifiers: keepState,
 			},
 			"title": schema.StringAttribute{
-				Required:      true,
-				Validators:    []validator.String{stringvalidator.LengthBetween(1, 256)},
-				PlanModifiers: requiresReplace,
+				Required:   true,
+				Validators: []validator.String{stringvalidator.LengthBetween(1, 256)},
 			},
 			"slug": schema.StringAttribute{
-				Required:      true,
-				Validators:    []validator.String{stringvalidator.LengthBetween(1, 256)},
-				PlanModifiers: requiresReplace,
+				Required:   true,
+				Validators: []validator.String{stringvalidator.LengthBetween(1, 256)},
 			},
 			"description": schema.StringAttribute{
-				Optional:      true,
-				Validators:    []validator.String{stringvalidator.LengthAtMost(1024)},
-				PlanModifiers: requiresReplace,
+				Optional:   true,
+				Validators: []validator.String{stringvalidator.LengthAtMost(1024)},
 			},
 			"homepage_url": schema.StringAttribute{
-				Optional:      true,
-				PlanModifiers: requiresReplace,
+				Optional: true,
 			},
 			"contact_url": schema.StringAttribute{
-				Optional:      true,
-				PlanModifiers: requiresReplace,
+				Optional: true,
 			},
 			"icon": schema.StringAttribute{
 				Optional:            true,
-				Computed:            true,
 				MarkdownDescription: "URL of the icon to display on the status page.",
-				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"custom_domain": schema.StringAttribute{
 				Optional:            true,
-				Computed:            true,
 				MarkdownDescription: "Custom domain for the status page. DNS must point to OpenStatus before setting this.",
-				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"access_type": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
 				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`.",
 				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain")},
-				PlanModifiers:       requiresReplaceKeepState,
+				PlanModifiers:       keepState,
 			},
 			"password": schema.StringAttribute{
 				Optional:            true,
-				Computed:            true,
 				Sensitive:           true,
 				MarkdownDescription: "Password to protect the status page. Required when `access_type` is `password`.",
-				PlanModifiers:       requiresReplaceKeepState,
 			},
 			"auth_email_domains": schema.ListAttribute{
-				Optional:            true,
-				Computed:            true,
-				ElementType:         types.StringType,
+				Optional:    true,
+				ElementType: types.StringType,
 				MarkdownDescription: "List of email domains allowed to access the page. Used when `access_type` is `email-domain`.",
-				PlanModifiers:       []planmodifier.List{listplanmodifier.RequiresReplace(), listplanmodifier.UseStateForUnknown()},
 			},
 			"published": schema.BoolAttribute{Computed: true},
 			"theme":     schema.StringAttribute{Computed: true},
@@ -148,6 +133,20 @@ type apiStatusPageCreateRequest struct {
 	Theme            string   `json:"theme,omitempty"`
 	AccessType       string   `json:"accessType,omitempty"`
 	Password         string   `json:"password,omitempty"`
+	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
+}
+
+type apiStatusPageUpdateRequest struct {
+	ID               string   `json:"id"`
+	Title            *string  `json:"title,omitempty"`
+	Slug             *string  `json:"slug,omitempty"`
+	Description      *string  `json:"description,omitempty"`
+	HomepageURL      *string  `json:"homepageUrl,omitempty"`
+	ContactURL       *string  `json:"contactUrl,omitempty"`
+	Icon             *string  `json:"icon,omitempty"`
+	CustomDomain     *string  `json:"customDomain,omitempty"`
+	AccessType       *string  `json:"accessType,omitempty"`
+	Password         *string  `json:"password,omitempty"`
 	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
 }
 
@@ -246,8 +245,61 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
-func (r *statusPageResource) Update(_ context.Context, _ resource.UpdateRequest, _ *resource.UpdateResponse) {
-	// All mutable fields have RequiresReplace, so Update is never called.
+func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequest, resp *resource.UpdateResponse) {
+	var data statusPageModel
+	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+
+	// Send all fields on every update. Null in plan means "clear the field" (empty string).
+	title := data.Title.ValueString()
+	slug := data.Slug.ValueString()
+	desc := data.Description.ValueString()
+	homepageURL := data.HomepageURL.ValueString()
+	contactURL := data.ContactURL.ValueString()
+	icon := data.Icon.ValueString()
+	customDomain := data.CustomDomain.ValueString()
+
+	updateReq := apiStatusPageUpdateRequest{
+		ID:           data.ID.ValueString(),
+		Title:        &title,
+		Slug:         &slug,
+		Description:  &desc,
+		HomepageURL:  &homepageURL,
+		ContactURL:   &contactURL,
+		Icon:         &icon,
+		CustomDomain: &customDomain,
+	}
+
+	// Password has a min_len=1 validation server-side, only send when set.
+	if !data.Password.IsNull() {
+		v := data.Password.ValueString()
+		updateReq.Password = &v
+	}
+
+	if !data.AccessType.IsNull() && !data.AccessType.IsUnknown() {
+		v := accessTypeToProto(data.AccessType.ValueString())
+		updateReq.AccessType = &v
+	}
+	if !data.AuthEmailDomains.IsNull() {
+		var domains []string
+		resp.Diagnostics.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		updateReq.AuthEmailDomains = domains
+	}
+
+	var apiResp apiStatusPageResponse
+	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/UpdateStatusPage", updateReq, &apiResp)
+	if err != nil {
+		resp.Diagnostics.AddError("Error updating status page", err.Error())
+		return
+	}
+
+	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
+	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
 func (r *statusPageResource) Delete(ctx context.Context, req resource.DeleteRequest, resp *resource.DeleteResponse) {
@@ -324,29 +376,21 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 	if api.ContactURL != "" || !data.ContactURL.IsNull() {
 		data.ContactURL = types.StringValue(api.ContactURL)
 	}
-	if api.Icon != "" {
+	if api.Icon != "" || !data.Icon.IsNull() {
 		data.Icon = types.StringValue(api.Icon)
-	} else if data.Icon.IsUnknown() {
-		data.Icon = types.StringNull()
 	}
-	if api.CustomDomain != "" {
+	if api.CustomDomain != "" || !data.CustomDomain.IsNull() {
 		data.CustomDomain = types.StringValue(api.CustomDomain)
-	} else if data.CustomDomain.IsUnknown() {
-		data.CustomDomain = types.StringNull()
 	}
 	data.Published = types.BoolValue(api.Published)
 	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
 	if api.Password != "" {
 		data.Password = types.StringValue(api.Password)
-	} else if data.Password.IsUnknown() {
-		data.Password = types.StringNull()
 	}
-	if len(api.AuthEmailDomains) > 0 {
+	if len(api.AuthEmailDomains) > 0 || !data.AuthEmailDomains.IsNull() {
 		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
 		diags.Append(listDiags...)
 		data.AuthEmailDomains = list
-	} else if data.AuthEmailDomains.IsUnknown() {
-		data.AuthEmailDomains = types.ListNull(types.StringType)
 	}
 	data.Theme = types.StringValue(themeFromProto(api.Theme))
 	data.CreatedAt = types.StringValue(api.CreatedAt)
