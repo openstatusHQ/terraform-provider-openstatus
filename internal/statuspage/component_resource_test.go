@@ -222,7 +222,7 @@ func TestComponentAPIToModel_OverwritesGroupOrderWhenAPIReturnsNonZero(t *testin
 	api := apiComponent{
 		ID:         "1",
 		PageID:     "2",
-		Name:       "Hub UI",
+		Name:       "Acme API",
 		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
 		MonitorID:  "42",
 		Order:      5,

@@ -211,15 +211,14 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 	data.ID = types.StringValue(pageID)
 
 	// Read back full state.
-	var readResp apiStatusPageResponse
 	err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": pageID}, &readResp)
+		map[string]string{"id": pageID}, &apiResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page after create", err.Error())
 		return
 	}
 
-	statusPageAPIToModel(ctx, readResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
