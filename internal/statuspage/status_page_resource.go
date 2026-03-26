@@ -137,17 +137,17 @@ type apiStatusPageCreateRequest struct {
 }
 
 type apiStatusPageUpdateRequest struct {
-	ID               string   `json:"id"`
-	Title            *string  `json:"title,omitempty"`
-	Slug             *string  `json:"slug,omitempty"`
-	Description      *string  `json:"description,omitempty"`
-	HomepageURL      *string  `json:"homepageUrl,omitempty"`
-	ContactURL       *string  `json:"contactUrl,omitempty"`
-	Icon             *string  `json:"icon,omitempty"`
-	CustomDomain     *string  `json:"customDomain,omitempty"`
-	AccessType       *string  `json:"accessType,omitempty"`
-	Password         *string  `json:"password,omitempty"`
-	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
+	ID               string    `json:"id"`
+	Title            *string   `json:"title,omitempty"`
+	Slug             *string   `json:"slug,omitempty"`
+	Description      *string   `json:"description,omitempty"`
+	HomepageURL      *string   `json:"homepageUrl,omitempty"`
+	ContactURL       *string   `json:"contactUrl,omitempty"`
+	Icon             *string   `json:"icon,omitempty"`
+	CustomDomain     *string   `json:"customDomain,omitempty"`
+	AccessType       *string   `json:"accessType,omitempty"`
+	Password         *string   `json:"password,omitempty"`
+	AuthEmailDomains *[]string `json:"authEmailDomains,omitempty"`
 }
 
 type apiStatusPageResponse struct {
@@ -273,7 +273,7 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 	}
 
 	// Password has a min_len=1 validation server-side, only send when set.
-	if !data.Password.IsNull() {
+	if !data.Password.IsNull() && !data.Password.IsUnknown() {
 		v := data.Password.ValueString()
 		updateReq.Password = &v
 	}
@@ -282,13 +282,13 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 		v := accessTypeToProto(data.AccessType.ValueString())
 		updateReq.AccessType = &v
 	}
-	if !data.AuthEmailDomains.IsNull() {
+	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
 		var domains []string
 		resp.Diagnostics.Append(data.AuthEmailDomains.ElementsAs(ctx, &domains, false)...)
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		updateReq.AuthEmailDomains = domains
+		updateReq.AuthEmailDomains = &domains
 	}
 
 	var apiResp apiStatusPageResponse

@@ -342,7 +342,7 @@ func TestAPIStatusPageUpdateRequest_AllFields(t *testing.T) {
 		CustomDomain:     &domain,
 		AccessType:       &access,
 		Password:         &pass,
-		AuthEmailDomains: []string{"acme.example.com"},
+		AuthEmailDomains: &[]string{"acme.example.com"},
 	}
 
 	data, err := json.Marshal(req)
@@ -363,6 +363,10 @@ func TestAPIStatusPageUpdateRequest_AllFields(t *testing.T) {
 	}
 	if raw["password"] != "secret" {
 		t.Errorf("password = %v, want secret", raw["password"])
+	}
+	domains, ok := raw["authEmailDomains"].([]interface{})
+	if !ok || len(domains) != 1 || domains[0] != "acme.example.com" {
+		t.Errorf("authEmailDomains = %v, want [acme.example.com]", raw["authEmailDomains"])
 	}
 }
 
@@ -415,5 +419,33 @@ func TestAPIStatusPageUpdateRequest_EmptyStringClearsField(t *testing.T) {
 	}
 	if _, ok := raw["homepageUrl"]; !ok {
 		t.Error("homepageUrl should be present with empty string to clear it")
+	}
+}
+
+func TestAPIStatusPageUpdateRequest_EmptySliceClearsAuthEmailDomains(t *testing.T) {
+	domains := []string{}
+	req := apiStatusPageUpdateRequest{
+		ID:               "42",
+		AuthEmailDomains: &domains,
+	}
+
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("unexpected marshal error: %v", err)
+	}
+
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unexpected unmarshal error: %v", err)
+	}
+
+	// Empty slice via pointer should be present to clear the field server-side.
+	val, ok := raw["authEmailDomains"]
+	if !ok {
+		t.Fatal("authEmailDomains should be present with empty slice to clear it")
+	}
+	arr, ok := val.([]interface{})
+	if !ok || len(arr) != 0 {
+		t.Errorf("authEmailDomains = %v, want empty array", val)
 	}
 }
