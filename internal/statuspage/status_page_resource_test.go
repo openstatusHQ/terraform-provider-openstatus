@@ -12,9 +12,9 @@ import (
 
 func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 	req := apiRPCCreateRequest{
-		Title:            "My Page",
-		Slug:             "my-page",
-		Description:      "A description",
+		Title:            "Acme Corp Status",
+		Slug:             "acme-corp",
+		Description:      "Acme Corp services status",
 		HomepageURL:      "https://example.com",
 		ContactURL:       "mailto:a@b.com",
 		Icon:             "https://example.com/icon.png",
@@ -36,9 +36,9 @@ func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 	}
 
 	expected := map[string]interface{}{
-		"title":       "My Page",
-		"slug":        "my-page",
-		"description": "A description",
+		"title":       "Acme Corp Status",
+		"slug":        "acme-corp",
+		"description": "Acme Corp services status",
 		"homepageUrl": "https://example.com",
 		"contactUrl":  "mailto:a@b.com",
 		"icon":        "https://example.com/icon.png",
@@ -69,8 +69,8 @@ func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 
 func TestAPIRPCCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
 	req := apiRPCCreateRequest{
-		Title: "My Page",
-		Slug:  "my-page",
+		Title: "Acme Corp Status",
+		Slug:  "acme-corp",
 	}
 
 	data, err := json.Marshal(req)
@@ -97,12 +97,12 @@ func TestAPIRPCStatusPage_ParsesResponse(t *testing.T) {
 	apiJSON := `{
 		"statusPage": {
 			"id": "4409",
-			"title": "Traefik Status",
-			"slug": "traefik",
-			"description": "Traefik services status page",
-			"homepageUrl": "https://traefik.io",
-			"contactUrl": "mailto:support@traefik.io",
-			"icon": "https://traefik.io/favicon.png",
+			"title": "Acme Corp Status",
+			"slug": "acme-corp",
+			"description": "Acme Corp services status page",
+			"homepageUrl": "https://acme.example.com",
+			"contactUrl": "mailto:support@acme.example.com",
+			"icon": "https://acme.example.com/favicon.png",
 			"customDomain": "",
 			"published": false,
 			"accessType": "PAGE_ACCESS_TYPE_PUBLIC",
@@ -123,14 +123,14 @@ func TestAPIRPCStatusPage_ParsesResponse(t *testing.T) {
 	if page.ID != "4409" {
 		t.Errorf("ID = %q, want %q", page.ID, "4409")
 	}
-	if page.Title != "Traefik Status" {
-		t.Errorf("Title = %q, want %q", page.Title, "Traefik Status")
+	if page.Title != "Acme Corp Status" {
+		t.Errorf("Title = %q, want %q", page.Title, "Acme Corp Status")
 	}
-	if page.HomepageURL != "https://traefik.io" {
-		t.Errorf("HomepageURL = %q, want %q", page.HomepageURL, "https://traefik.io")
+	if page.HomepageURL != "https://acme.example.com" {
+		t.Errorf("HomepageURL = %q, want %q", page.HomepageURL, "https://acme.example.com")
 	}
-	if page.Icon != "https://traefik.io/favicon.png" {
-		t.Errorf("Icon = %q, want %q", page.Icon, "https://traefik.io/favicon.png")
+	if page.Icon != "https://acme.example.com/favicon.png" {
+		t.Errorf("Icon = %q, want %q", page.Icon, "https://acme.example.com/favicon.png")
 	}
 	if page.AccessType != "PAGE_ACCESS_TYPE_PUBLIC" {
 		t.Errorf("AccessType = %q, want %q", page.AccessType, "PAGE_ACCESS_TYPE_PUBLIC")
@@ -195,13 +195,13 @@ func TestThemeFromProto(t *testing.T) {
 func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
 	api := apiRPCStatusPage{
 		ID:               "42",
-		Title:            "Test",
-		Slug:             "test",
-		Description:      "desc",
-		HomepageURL:      "https://example.com",
-		ContactURL:       "mailto:a@b.com",
-		Icon:             "https://example.com/icon.png",
-		CustomDomain:     "status.example.com",
+		Title:            "Acme Corp Status",
+		Slug:             "acme-corp",
+		Description:      "Acme Corp services status",
+		HomepageURL:      "https://acme.example.com",
+		ContactURL:       "mailto:support@acme.example.com",
+		Icon:             "https://acme.example.com/icon.png",
+		CustomDomain:     "status.acme.example.com",
 		Published:        true,
 		AccessType:       "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
 		Password:         "secret",
@@ -221,20 +221,20 @@ func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
 	if data.ID.ValueString() != "42" {
 		t.Errorf("ID = %q, want %q", data.ID.ValueString(), "42")
 	}
-	if data.Title.ValueString() != "Test" {
-		t.Errorf("Title = %q, want %q", data.Title.ValueString(), "Test")
+	if data.Title.ValueString() != "Acme Corp Status" {
+		t.Errorf("Title = %q, want %q", data.Title.ValueString(), "Acme Corp Status")
 	}
-	if data.HomepageURL.ValueString() != "https://example.com" {
-		t.Errorf("HomepageURL = %q, want %q", data.HomepageURL.ValueString(), "https://example.com")
+	if data.HomepageURL.ValueString() != "https://acme.example.com" {
+		t.Errorf("HomepageURL = %q, want %q", data.HomepageURL.ValueString(), "https://acme.example.com")
 	}
-	if data.ContactURL.ValueString() != "mailto:a@b.com" {
-		t.Errorf("ContactURL = %q, want %q", data.ContactURL.ValueString(), "mailto:a@b.com")
+	if data.ContactURL.ValueString() != "mailto:support@acme.example.com" {
+		t.Errorf("ContactURL = %q, want %q", data.ContactURL.ValueString(), "mailto:support@acme.example.com")
 	}
-	if data.Icon.ValueString() != "https://example.com/icon.png" {
-		t.Errorf("Icon = %q, want %q", data.Icon.ValueString(), "https://example.com/icon.png")
+	if data.Icon.ValueString() != "https://acme.example.com/icon.png" {
+		t.Errorf("Icon = %q, want %q", data.Icon.ValueString(), "https://acme.example.com/icon.png")
 	}
-	if data.CustomDomain.ValueString() != "status.example.com" {
-		t.Errorf("CustomDomain = %q, want %q", data.CustomDomain.ValueString(), "status.example.com")
+	if data.CustomDomain.ValueString() != "status.acme.example.com" {
+		t.Errorf("CustomDomain = %q, want %q", data.CustomDomain.ValueString(), "status.acme.example.com")
 	}
 	if !data.Published.ValueBool() {
 		t.Error("Published = false, want true")
@@ -253,8 +253,8 @@ func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
 func TestRPCAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
 	api := apiRPCStatusPage{
 		ID:         "1",
-		Title:      "Test",
-		Slug:       "test",
+		Title:      "Acme Minimal",
+		Slug:       "acme-minimal",
 		AccessType: "PAGE_ACCESS_TYPE_PUBLIC",
 		Theme:      "PAGE_THEME_SYSTEM",
 	}
@@ -271,8 +271,8 @@ func TestRPCAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
 func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) {
 	api := apiRPCStatusPage{
 		ID:         "1",
-		Title:      "Test",
-		Slug:       "test",
+		Title:      "Acme Minimal",
+		Slug:       "acme-minimal",
 		AccessType: "PAGE_ACCESS_TYPE_PUBLIC",
 		Theme:      "PAGE_THEME_SYSTEM",
 	}
@@ -292,8 +292,8 @@ func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) 
 func TestRPCAPIToModel_AuthEmailDomains(t *testing.T) {
 	api := apiRPCStatusPage{
 		ID:               "1",
-		Title:            "Test",
-		Slug:             "test",
+		Title:            "Acme Secure",
+		Slug:             "acme-secure",
 		AccessType:       "PAGE_ACCESS_TYPE_AUTHENTICATED",
 		AuthEmailDomains: []string{"example.com", "test.com"},
 		Theme:            "PAGE_THEME_SYSTEM",
