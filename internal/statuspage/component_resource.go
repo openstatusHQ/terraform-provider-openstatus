@@ -133,9 +133,9 @@ type apiComponent struct {
 	Description string `json:"description"`
 	Type        string `json:"type"`
 	MonitorID   string `json:"monitorId"`
-	Order       int64  `json:"order"`
+	Order       *int64 `json:"order"`
 	GroupID     string `json:"groupId"`
-	GroupOrder  int64  `json:"groupOrder"`
+	GroupOrder  *int64 `json:"groupOrder"`
 	CreatedAt   string `json:"createdAt"`
 	UpdatedAt   string `json:"updatedAt"`
 }
@@ -327,11 +327,11 @@ func componentAPIToModel(api apiComponent, data *componentModel) {
 	if api.Description != "" {
 		data.Description = types.StringValue(api.Description)
 	}
-	if api.Order != 0 || data.Order.IsNull() || data.Order.IsUnknown() {
-		data.Order = types.Int64Value(api.Order)
+	if api.Order != nil {
+		data.Order = types.Int64Value(*api.Order)
 	}
-	if api.GroupOrder != 0 || data.GroupOrder.IsNull() || data.GroupOrder.IsUnknown() {
-		data.GroupOrder = types.Int64Value(api.GroupOrder)
+	if api.GroupOrder != nil {
+		data.GroupOrder = types.Int64Value(*api.GroupOrder)
 	}
 	if api.GroupID != "" {
 		data.GroupID = types.StringValue(api.GroupID)
