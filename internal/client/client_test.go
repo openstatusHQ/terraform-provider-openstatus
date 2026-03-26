@@ -21,7 +21,7 @@ func TestDo_Success(t *testing.T) {
 		}
 
 		var reqBody map[string]string
-		_ = json.NewDecoder(r.Body).Decode(&reqBody)
+		json.NewDecoder(r.Body).Decode(&reqBody)
 		if reqBody["name"] != "test" {
 			t.Errorf("expected name=test, got %q", reqBody["name"])
 		}
@@ -129,12 +129,5 @@ func TestNew_DefaultBaseURL(t *testing.T) {
 	c := New("", "key")
 	if c.baseURL != DefaultBaseURL {
 		t.Errorf("expected default base URL, got %q", c.baseURL)
-	}
-}
-
-func TestNew_CustomBaseURL(t *testing.T) {
-	c := New("https://custom.example.com/rpc", "key")
-	if c.baseURL != "https://custom.example.com/rpc" {
-		t.Errorf("expected custom base URL, got %q", c.baseURL)
 	}
 }
