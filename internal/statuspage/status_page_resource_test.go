@@ -10,8 +10,8 @@ import (
 
 // --- RPC create request serialization ---
 
-func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
-	req := apiRPCCreateRequest{
+func TestAPIStatusPageCreateRequest_AllFields(t *testing.T) {
+	req := apiStatusPageCreateRequest{
 		Title:            "Acme Corp Status",
 		Slug:             "acme-corp",
 		Description:      "Acme Corp services status",
@@ -67,8 +67,8 @@ func TestAPIRPCCreateRequest_AllFields(t *testing.T) {
 	}
 }
 
-func TestAPIRPCCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
-	req := apiRPCCreateRequest{
+func TestAPIStatusPageCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
+	req := apiStatusPageCreateRequest{
 		Title: "Acme Corp Status",
 		Slug:  "acme-corp",
 	}
@@ -93,7 +93,7 @@ func TestAPIRPCCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
 
 // --- RPC response deserialization ---
 
-func TestAPIRPCStatusPage_ParsesResponse(t *testing.T) {
+func TestAPIStatusPage_ParsesResponse(t *testing.T) {
 	apiJSON := `{
 		"statusPage": {
 			"id": "4409",
@@ -114,7 +114,7 @@ func TestAPIRPCStatusPage_ParsesResponse(t *testing.T) {
 		}
 	}`
 
-	var resp apiRPCResponse
+	var resp apiStatusPageResponse
 	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
@@ -190,10 +190,10 @@ func TestThemeFromProto(t *testing.T) {
 	}
 }
 
-// --- rpcAPIToModel ---
+// --- statusPageAPIToModel ---
 
-func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
-	api := apiRPCStatusPage{
+func TestStatusPageAPIToModel_SetsAllFields(t *testing.T) {
+	api := apiStatusPage{
 		ID:               "42",
 		Title:            "Acme Corp Status",
 		Slug:             "acme-corp",
@@ -213,7 +213,7 @@ func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	rpcAPIToModel(context.Background(), api, &data, &diags)
+	statusPageAPIToModel(context.Background(), api, &data, &diags)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -250,8 +250,8 @@ func TestRPCAPIToModel_SetsAllFields(t *testing.T) {
 	}
 }
 
-func TestRPCAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
-	api := apiRPCStatusPage{
+func TestStatusPageAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
+	api := apiStatusPage{
 		ID:         "1",
 		Title:      "Acme Minimal",
 		Slug:       "acme-minimal",
@@ -261,15 +261,15 @@ func TestRPCAPIToModel_IconNullWhenAPIReturnsEmptyAndModelNull(t *testing.T) {
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	rpcAPIToModel(context.Background(), api, &data, &diags)
+	statusPageAPIToModel(context.Background(), api, &data, &diags)
 
 	if !data.Icon.IsNull() {
 		t.Errorf("Icon should remain null when API returns empty and model is null, got %q", data.Icon.ValueString())
 	}
 }
 
-func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) {
-	api := apiRPCStatusPage{
+func TestStatusPageAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) {
+	api := apiStatusPage{
 		ID:         "1",
 		Title:      "Acme Minimal",
 		Slug:       "acme-minimal",
@@ -279,7 +279,7 @@ func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) 
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	rpcAPIToModel(context.Background(), api, &data, &diags)
+	statusPageAPIToModel(context.Background(), api, &data, &diags)
 
 	if !data.HomepageURL.IsNull() {
 		t.Errorf("HomepageURL should remain null when API returns empty and model is null, got %q", data.HomepageURL.ValueString())
@@ -289,8 +289,8 @@ func TestRPCAPIToModel_HomepageURLAndContactURLPreservedWhenEmpty(t *testing.T) 
 	}
 }
 
-func TestRPCAPIToModel_AuthEmailDomains(t *testing.T) {
-	api := apiRPCStatusPage{
+func TestStatusPageAPIToModel_AuthEmailDomains(t *testing.T) {
+	api := apiStatusPage{
 		ID:               "1",
 		Title:            "Acme Secure",
 		Slug:             "acme-secure",
@@ -301,7 +301,7 @@ func TestRPCAPIToModel_AuthEmailDomains(t *testing.T) {
 
 	var data statusPageModel
 	var diags diag.Diagnostics
-	rpcAPIToModel(context.Background(), api, &data, &diags)
+	statusPageAPIToModel(context.Background(), api, &data, &diags)
 
 	if data.AuthEmailDomains.IsNull() {
 		t.Fatal("AuthEmailDomains should not be null")

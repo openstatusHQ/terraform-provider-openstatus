@@ -136,8 +136,7 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	}
 }
 
-// apiRPCCreateRequest is sent to the RPC CreateStatusPage endpoint.
-type apiRPCCreateRequest struct {
+type apiStatusPageCreateRequest struct {
 	Title            string   `json:"title"`
 	Slug             string   `json:"slug"`
 	Description      string   `json:"description,omitempty"`
@@ -151,13 +150,11 @@ type apiRPCCreateRequest struct {
 	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
 }
 
-// apiRPCResponse wraps the RPC response which nests the page under "statusPage".
-type apiRPCResponse struct {
-	StatusPage apiRPCStatusPage `json:"statusPage"`
+type apiStatusPageResponse struct {
+	StatusPage apiStatusPage `json:"statusPage"`
 }
 
-// apiRPCStatusPage is the page object returned by the RPC API.
-type apiRPCStatusPage struct {
+type apiStatusPage struct {
 	ID               string   `json:"id"`
 	Title            string   `json:"title"`
 	Slug             string   `json:"slug"`
@@ -182,7 +179,7 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	rpcReq := apiRPCCreateRequest{
+	apiReq := apiStatusPageCreateRequest{
 		Title:       data.Title.ValueString(),
 		Slug:        data.Slug.ValueString(),
 		Description: data.Description.ValueString(),
@@ -200,21 +197,21 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		rpcReq.AuthEmailDomains = domains
+		apiReq.AuthEmailDomains = domains
 	}
 
-	var rpcResp apiRPCResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateStatusPage", rpcReq, &rpcResp)
+	var apiResp apiStatusPageResponse
+	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateStatusPage", apiReq, &apiResp)
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating status page", err.Error())
 		return
 	}
 
-	pageID := rpcResp.StatusPage.ID
+	pageID := apiResp.StatusPage.ID
 	data.ID = types.StringValue(pageID)
 
-	// Read back full state via RPC.
-	var readResp apiRPCResponse
+	// Read back full state.
+	var readResp apiStatusPageResponse
 	err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
 		map[string]string{"id": pageID}, &readResp)
 	if err != nil {
@@ -222,7 +219,7 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	rpcAPIToModel(ctx, readResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, readResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -233,9 +230,9 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var rpcResp apiRPCResponse
+	var apiResp apiStatusPageResponse
 	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, &rpcResp)
+		map[string]string{"id": data.ID.ValueString()}, &apiResp)
 	if err != nil {
 		if isNotFound(err) {
 			resp.State.RemoveResource(ctx)
@@ -245,7 +242,7 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	rpcAPIToModel(ctx, rpcResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -313,8 +310,8 @@ func themeFromProto(proto string) string {
 	}
 }
 
-// rpcAPIToModel maps an RPC API response to the Terraform model.
-func rpcAPIToModel(ctx context.Context, api apiRPCStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
+// statusPageAPIToModel maps an API response to the Terraform model.
+func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
 	data.ID = types.StringValue(api.ID)
 	data.Title = types.StringValue(api.Title)
 	data.Slug = types.StringValue(api.Slug)

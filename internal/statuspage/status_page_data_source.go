@@ -82,7 +82,7 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	var rpcResp apiRPCResponse
+	var rpcResp apiStatusPageResponse
 	err := d.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
 		map[string]string{"id": data.ID.ValueString()}, &rpcResp)
 	if err != nil {
