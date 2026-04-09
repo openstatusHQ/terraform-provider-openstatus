@@ -13,8 +13,9 @@ Manages a component group on an OpenStatus status page. Groups organize related 
 
 ```terraform
 resource "openstatus_status_page_component_group" "infrastructure" {
-  page_id = openstatus_status_page.main.id
-  name    = "Infrastructure"
+  page_id      = openstatus_status_page.main.id
+  name         = "Infrastructure"
+  default_open = true
 }
 ```
 
@@ -25,6 +26,10 @@ resource "openstatus_status_page_component_group" "infrastructure" {
 
 - `page_id` (String) ID of the status page this group belongs to. Changing this forces a new resource.
 - `name` (String) Name of the component group (1–256 characters).
+
+### Optional
+
+- `default_open` (Boolean) Whether the group should be expanded by default on the status page. Defaults to `false`.
 
 ### Read-Only
 
