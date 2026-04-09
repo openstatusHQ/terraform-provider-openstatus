@@ -10,6 +10,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/booldefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -31,11 +32,12 @@ type componentGroupResource struct {
 }
 
 type componentGroupModel struct {
-	ID        types.String `tfsdk:"id"`
-	PageID    types.String `tfsdk:"page_id"`
-	Name      types.String `tfsdk:"name"`
-	CreatedAt types.String `tfsdk:"created_at"`
-	UpdatedAt types.String `tfsdk:"updated_at"`
+	ID          types.String `tfsdk:"id"`
+	PageID      types.String `tfsdk:"page_id"`
+	Name        types.String `tfsdk:"name"`
+	DefaultOpen types.Bool   `tfsdk:"default_open"`
+	CreatedAt   types.String `tfsdk:"created_at"`
+	UpdatedAt   types.String `tfsdk:"updated_at"`
 }
 
 func (r *componentGroupResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -65,6 +67,12 @@ func (r *componentGroupResource) Schema(_ context.Context, _ resource.SchemaRequ
 				Required:   true,
 				Validators: []validator.String{stringvalidator.LengthBetween(1, 256)},
 			},
+			"default_open": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Whether the group should be expanded by default on the status page.",
+			},
 			"created_at": schema.StringAttribute{Computed: true},
 			"updated_at": schema.StringAttribute{Computed: true},
 		},
@@ -72,21 +80,24 @@ func (r *componentGroupResource) Schema(_ context.Context, _ resource.SchemaRequ
 }
 
 type apiComponentGroup struct {
-	ID        string `json:"id"`
-	PageID    string `json:"pageId"`
-	Name      string `json:"name"`
-	CreatedAt string `json:"createdAt"`
-	UpdatedAt string `json:"updatedAt"`
+	ID          string `json:"id"`
+	PageID      string `json:"pageId"`
+	Name        string `json:"name"`
+	DefaultOpen bool   `json:"defaultOpen"`
+	CreatedAt   string `json:"createdAt"`
+	UpdatedAt   string `json:"updatedAt"`
 }
 
 type apiCreateComponentGroupRequest struct {
-	PageID string `json:"pageId"`
-	Name   string `json:"name"`
+	PageID      string `json:"pageId"`
+	Name        string `json:"name"`
+	DefaultOpen bool   `json:"defaultOpen"`
 }
 
 type apiUpdateComponentGroupRequest struct {
-	ID   string  `json:"id"`
-	Name *string `json:"name,omitempty"`
+	ID          string  `json:"id"`
+	Name        *string `json:"name,omitempty"`
+	DefaultOpen *bool   `json:"defaultOpen,omitempty"`
 }
 
 type apiComponentGroupResponse struct {
@@ -101,8 +112,9 @@ func (r *componentGroupResource) Create(ctx context.Context, req resource.Create
 	}
 
 	apiReq := apiCreateComponentGroupRequest{
-		PageID: data.PageID.ValueString(),
-		Name:   data.Name.ValueString(),
+		PageID:      data.PageID.ValueString(),
+		Name:        data.Name.ValueString(),
+		DefaultOpen: data.DefaultOpen.ValueBool(),
 	}
 
 	var apiResp apiComponentGroupResponse
@@ -155,9 +167,11 @@ func (r *componentGroupResource) Update(ctx context.Context, req resource.Update
 	}
 
 	name := data.Name.ValueString()
+	defaultOpen := data.DefaultOpen.ValueBool()
 	updateReq := apiUpdateComponentGroupRequest{
-		ID:   state.ID.ValueString(),
-		Name: &name,
+		ID:          state.ID.ValueString(),
+		Name:        &name,
+		DefaultOpen: &defaultOpen,
 	}
 
 	var apiResp apiComponentGroupResponse
@@ -214,6 +228,7 @@ func componentGroupAPIToModel(api apiComponentGroup, data *componentGroupModel) 
 	data.ID = types.StringValue(api.ID)
 	data.PageID = types.StringValue(api.PageID)
 	data.Name = types.StringValue(api.Name)
+	data.DefaultOpen = types.BoolValue(api.DefaultOpen)
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 }
