@@ -274,3 +274,29 @@ func TestComponentAPIToModel_OverwritesGroupOrderWhenAPIReturnsNonZero(t *testin
 		t.Errorf("Order = %d, want 5", data.Order.ValueInt64())
 	}
 }
+
+func TestComponentAPIToModel_CollapsesUnknownToNullWhenAPIOmitsFields(t *testing.T) {
+	api := apiComponent{
+		ID:        "1",
+		PageID:    "2",
+		Name:      "Acme",
+		Type:      "PAGE_COMPONENT_TYPE_MONITOR",
+		MonitorID: "42",
+		CreatedAt: "2026-03-23T00:00:00Z",
+		UpdatedAt: "2026-03-23T00:00:00Z",
+	}
+
+	data := componentModel{
+		Order:      types.Int64Unknown(),
+		GroupOrder: types.Int64Unknown(),
+	}
+
+	componentAPIToModel(api, &data)
+
+	if !data.GroupOrder.IsNull() {
+		t.Errorf("GroupOrder = %v, want Null", data.GroupOrder)
+	}
+	if !data.Order.IsNull() {
+		t.Errorf("Order = %v, want Null", data.Order)
+	}
+}
