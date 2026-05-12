@@ -423,7 +423,7 @@ func extractProviderData(ctx context.Context, data notificationModel) (map[strin
 		wrapKey = "slack"
 		inner, diags = extractWebhookBlock(ctx, data.Slack, &diags)
 	case "pagerduty":
-		wrapKey = "pagerDuty"
+		wrapKey = "pagerduty"
 		inner, diags = extractSingleFieldBlock(ctx, data.PagerDuty, "integration_key", "integrationKey", &diags)
 	case "opsgenie":
 		wrapKey = "opsgenie"
@@ -438,7 +438,7 @@ func extractProviderData(ctx context.Context, data notificationModel) (map[strin
 		wrapKey = "sms"
 		inner, diags = extractSingleFieldBlock(ctx, data.SMS, "phone_number", "phoneNumber", &diags)
 	case "whatsapp":
-		wrapKey = "whatsApp"
+		wrapKey = "whatsapp"
 		inner, diags = extractSingleFieldBlock(ctx, data.WhatsApp, "phone_number", "phoneNumber", &diags)
 	case "google_chat":
 		wrapKey = "googleChat"
@@ -712,12 +712,12 @@ var providerTypeToWrapKey = map[string]string{
 	"discord":        "discord",
 	"email":          "email",
 	"slack":          "slack",
-	"pagerduty":      "pagerDuty",
+	"pagerduty":      "pagerduty",
 	"opsgenie":       "opsgenie",
 	"webhook":        "webhook",
 	"telegram":       "telegram",
 	"sms":            "sms",
-	"whatsapp":       "whatsApp",
+	"whatsapp":       "whatsapp",
 	"google_chat":    "googleChat",
 	"grafana_oncall": "grafanaOncall",
 	"ntfy":           "ntfy",
