@@ -329,9 +329,13 @@ func componentAPIToModel(api apiComponent, data *componentModel) {
 	}
 	if api.Order != nil {
 		data.Order = types.Int64Value(*api.Order)
+	} else if data.Order.IsUnknown() {
+		data.Order = types.Int64Null()
 	}
 	if api.GroupOrder != nil {
 		data.GroupOrder = types.Int64Value(*api.GroupOrder)
+	} else if data.GroupOrder.IsUnknown() {
+		data.GroupOrder = types.Int64Null()
 	}
 	if api.GroupID != "" {
 		data.GroupID = types.StringValue(api.GroupID)
