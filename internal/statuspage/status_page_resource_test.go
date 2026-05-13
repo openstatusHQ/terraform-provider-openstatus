@@ -36,16 +36,16 @@ func TestAPIStatusPageCreateRequest_AllFields(t *testing.T) {
 	}
 
 	expected := map[string]interface{}{
-		"title":       "Acme Corp Status",
-		"slug":        "acme-corp",
-		"description": "Acme Corp services status",
-		"homepageUrl": "https://example.com",
-		"contactUrl":  "mailto:a@b.com",
-		"icon":        "https://example.com/icon.png",
+		"title":        "Acme Corp Status",
+		"slug":         "acme-corp",
+		"description":  "Acme Corp services status",
+		"homepageUrl":  "https://example.com",
+		"contactUrl":   "mailto:a@b.com",
+		"icon":         "https://example.com/icon.png",
 		"customDomain": "status.example.com",
-		"theme":       "PAGE_THEME_DARK",
-		"accessType":  "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
-		"password":    "secret",
+		"theme":        "PAGE_THEME_DARK",
+		"accessType":   "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED",
+		"password":     "secret",
 	}
 	for k, want := range expected {
 		got, ok := raw[k]
@@ -83,7 +83,7 @@ func TestAPIStatusPageCreateRequest_OmitsEmptyOptionalFields(t *testing.T) {
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	omitted := []string{"description", "homepageUrl", "contactUrl", "icon", "customDomain", "theme", "accessType", "password", "authEmailDomains"}
+	omitted := []string{"description", "homepageUrl", "contactUrl", "icon", "customDomain", "theme", "accessType", "password", "authEmailDomains", "allowedIpRanges", "defaultLocale", "locales", "allowIndex"}
 	for _, field := range omitted {
 		if _, ok := raw[field]; ok {
 			t.Errorf("field %q should be omitted when empty", field)
@@ -159,33 +159,48 @@ func TestAccessTypeToProto(t *testing.T) {
 }
 
 func TestAccessTypeFromProto(t *testing.T) {
-	cases := map[string]string{
+	knownCases := map[string]string{
 		"PAGE_ACCESS_TYPE_PUBLIC":             "public",
 		"PAGE_ACCESS_TYPE_PASSWORD_PROTECTED": "password",
 		"PAGE_ACCESS_TYPE_AUTHENTICATED":      "email-domain",
-		"PAGE_ACCESS_TYPE_UNSPECIFIED":        "public",
-		"":                                    "public",
+		"PAGE_ACCESS_TYPE_IP_RESTRICTED":      "ip",
 	}
-	for proto, want := range cases {
-		got := accessTypeFromProto(proto)
+	for proto, want := range knownCases {
+		got, ok := accessTypeFromProto(proto)
+		if !ok {
+			t.Errorf("accessTypeFromProto(%q) ok=false, want true", proto)
+			continue
+		}
 		if got != want {
 			t.Errorf("accessTypeFromProto(%q) = %q, want %q", proto, got, want)
+		}
+	}
+	for _, proto := range []string{"PAGE_ACCESS_TYPE_UNSPECIFIED", "", "FUTURE"} {
+		if _, ok := accessTypeFromProto(proto); ok {
+			t.Errorf("accessTypeFromProto(%q) ok=true, want false", proto)
 		}
 	}
 }
 
 func TestThemeFromProto(t *testing.T) {
-	cases := map[string]string{
-		"PAGE_THEME_SYSTEM":      "system",
-		"PAGE_THEME_LIGHT":       "light",
-		"PAGE_THEME_DARK":        "dark",
-		"PAGE_THEME_UNSPECIFIED": "system",
-		"":                       "system",
+	knownCases := map[string]string{
+		"PAGE_THEME_SYSTEM": "system",
+		"PAGE_THEME_LIGHT":  "light",
+		"PAGE_THEME_DARK":   "dark",
 	}
-	for proto, want := range cases {
-		got := themeFromProto(proto)
+	for proto, want := range knownCases {
+		got, ok := themeFromProto(proto)
+		if !ok {
+			t.Errorf("themeFromProto(%q) ok=false, want true", proto)
+			continue
+		}
 		if got != want {
 			t.Errorf("themeFromProto(%q) = %q, want %q", proto, got, want)
+		}
+	}
+	for _, proto := range []string{"PAGE_THEME_UNSPECIFIED", "", "NEON"} {
+		if _, ok := themeFromProto(proto); ok {
+			t.Errorf("themeFromProto(%q) ok=true, want false", proto)
 		}
 	}
 }
@@ -439,7 +454,6 @@ func TestAPIStatusPageUpdateRequest_EmptySliceClearsAuthEmailDomains(t *testing.
 		t.Fatalf("unexpected unmarshal error: %v", err)
 	}
 
-	// Empty slice via pointer should be present to clear the field server-side.
 	val, ok := raw["authEmailDomains"]
 	if !ok {
 		t.Fatal("authEmailDomains should be present with empty slice to clear it")
@@ -447,5 +461,128 @@ func TestAPIStatusPageUpdateRequest_EmptySliceClearsAuthEmailDomains(t *testing.
 	arr, ok := val.([]interface{})
 	if !ok || len(arr) != 0 {
 		t.Errorf("authEmailDomains = %v, want empty array", val)
+	}
+}
+
+func TestAccessTypeToProto_IP(t *testing.T) {
+	if got := accessTypeToProto("ip"); got != "PAGE_ACCESS_TYPE_IP_RESTRICTED" {
+		t.Errorf("accessTypeToProto(\"ip\") = %q, want PAGE_ACCESS_TYPE_IP_RESTRICTED", got)
+	}
+}
+
+func TestLocaleRoundTrip(t *testing.T) {
+	cases := map[string]string{"en": "LOCALE_EN", "fr": "LOCALE_FR", "de": "LOCALE_DE"}
+	for tf, proto := range cases {
+		if got := localeToProto(tf); got != proto {
+			t.Errorf("localeToProto(%q) = %q, want %q", tf, got, proto)
+		}
+		got, ok := localeFromProto(proto)
+		if !ok || got != tf {
+			t.Errorf("localeFromProto(%q) = (%q, %v), want (%q, true)", proto, got, ok, tf)
+		}
+	}
+	for _, proto := range []string{"LOCALE_UNSPECIFIED", "", "LOCALE_ES"} {
+		if _, ok := localeFromProto(proto); ok {
+			t.Errorf("localeFromProto(%q) ok=true, want false", proto)
+		}
+	}
+}
+
+func TestThemeToProto_All(t *testing.T) {
+	cases := map[string]string{"system": "PAGE_THEME_SYSTEM", "light": "PAGE_THEME_LIGHT", "dark": "PAGE_THEME_DARK"}
+	for tf, proto := range cases {
+		if got := themeToProto(tf); got != proto {
+			t.Errorf("themeToProto(%q) = %q, want %q", tf, got, proto)
+		}
+	}
+}
+
+func TestSlugPattern_Accepts(t *testing.T) {
+	for _, s := range []string{"acme", "acme-corp", "a-b-c", "abc123", "123-456"} {
+		if !slugPattern.MatchString(s) {
+			t.Errorf("slugPattern.MatchString(%q) = false, want true", s)
+		}
+	}
+}
+
+func TestSlugPattern_Rejects(t *testing.T) {
+	for _, s := range []string{"Acme", "acme_corp", "-acme", "acme-", "acme--corp", "", "acme corp"} {
+		if slugPattern.MatchString(s) {
+			t.Errorf("slugPattern.MatchString(%q) = true, want false", s)
+		}
+	}
+}
+
+func TestAPIStatusPageCreateRequest_NewH3Fields(t *testing.T) {
+	allowIndex := false
+	req := apiStatusPageCreateRequest{
+		Title:           "Test",
+		Slug:            "test",
+		Theme:           "PAGE_THEME_DARK",
+		DefaultLocale:   "LOCALE_FR",
+		Locales:         []string{"LOCALE_EN", "LOCALE_FR"},
+		AllowIndex:      &allowIndex,
+		AllowedIPRanges: "10.0.0.0/8",
+	}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	expect := map[string]interface{}{
+		"theme":           "PAGE_THEME_DARK",
+		"defaultLocale":   "LOCALE_FR",
+		"allowedIpRanges": "10.0.0.0/8",
+		"allowIndex":      false,
+	}
+	for k, want := range expect {
+		got, ok := raw[k]
+		if !ok {
+			t.Errorf("field %q missing", k)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %v, want %v", k, got, want)
+		}
+	}
+	locales, ok := raw["locales"].([]interface{})
+	if !ok || len(locales) != 2 {
+		t.Errorf("locales = %v, want [LOCALE_EN, LOCALE_FR]", raw["locales"])
+	}
+}
+
+func TestAPIStatusPageUpdateRequest_NilFieldsAbsent(t *testing.T) {
+	req := apiStatusPageUpdateRequest{ID: "42"}
+	data, err := json.Marshal(req)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]interface{}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	absent := []string{"theme", "defaultLocale", "locales", "allowIndex", "allowedIpRanges"}
+	for _, f := range absent {
+		if _, ok := raw[f]; ok {
+			t.Errorf("field %q should be absent when nil pointer; got %v", f, raw[f])
+		}
+	}
+}
+
+func TestStatusPageAPIToModel_UnknownLocaleWarns(t *testing.T) {
+	api := apiStatusPage{
+		ID:      "1",
+		Title:   "X",
+		Slug:    "x",
+		Locales: []string{"LOCALE_EN", "LOCALE_ES"},
+	}
+	var data statusPageModel
+	var diags diag.Diagnostics
+	statusPageAPIToModel(context.Background(), api, &data, &diags)
+	if diags.WarningsCount() != 1 {
+		t.Fatalf("warnings = %d, want 1", diags.WarningsCount())
 	}
 }

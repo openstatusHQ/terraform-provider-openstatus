@@ -2,6 +2,7 @@ package statuspage
 
 import (
 	"context"
+	"fmt"
 
 	"terraform-provider-openstatus/internal/client"
 
@@ -36,7 +37,11 @@ type statusPageDataSourceModel struct {
 	AccessType       types.String `tfsdk:"access_type"`
 	Password         types.String `tfsdk:"password"`
 	AuthEmailDomains types.List   `tfsdk:"auth_email_domains"`
+	AllowedIPRanges  types.String `tfsdk:"allowed_ip_ranges"`
 	Theme            types.String `tfsdk:"theme"`
+	DefaultLocale    types.String `tfsdk:"default_locale"`
+	Locales          types.List   `tfsdk:"locales"`
+	AllowIndex       types.Bool   `tfsdk:"allow_index"`
 	CreatedAt        types.String `tfsdk:"created_at"`
 	UpdatedAt        types.String `tfsdk:"updated_at"`
 }
@@ -56,7 +61,7 @@ func (d *statusPageDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Look up an existing status page by ID.",
 		Attributes: map[string]schema.Attribute{
-			"id":                schema.StringAttribute{Required: true},
+			"id":                 schema.StringAttribute{Required: true},
 			"title":              schema.StringAttribute{Computed: true},
 			"slug":               schema.StringAttribute{Computed: true},
 			"description":        schema.StringAttribute{Computed: true},
@@ -68,7 +73,11 @@ func (d *statusPageDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			"access_type":        schema.StringAttribute{Computed: true},
 			"password":           schema.StringAttribute{Computed: true, Sensitive: true},
 			"auth_email_domains": schema.ListAttribute{Computed: true, ElementType: types.StringType},
+			"allowed_ip_ranges":  schema.StringAttribute{Computed: true},
 			"theme":              schema.StringAttribute{Computed: true},
+			"default_locale":     schema.StringAttribute{Computed: true},
+			"locales":            schema.ListAttribute{Computed: true, ElementType: types.StringType},
+			"allow_index":        schema.BoolAttribute{Computed: true},
 			"created_at":         schema.StringAttribute{Computed: true},
 			"updated_at":         schema.StringAttribute{Computed: true},
 		},
@@ -100,12 +109,50 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	data.Icon = types.StringValue(api.Icon)
 	data.CustomDomain = types.StringValue(api.CustomDomain)
 	data.Published = types.BoolValue(api.Published)
-	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
+	if v, ok := accessTypeFromProto(api.AccessType); ok {
+		data.AccessType = types.StringValue(v)
+	} else if api.AccessType != "" {
+		resp.Diagnostics.AddWarning(
+			"Unknown status page access type",
+			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.AccessType),
+		)
+	}
 	data.Password = types.StringValue(api.Password)
 	list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
 	resp.Diagnostics.Append(listDiags...)
 	data.AuthEmailDomains = list
-	data.Theme = types.StringValue(themeFromProto(api.Theme))
+	if v, ok := themeFromProto(api.Theme); ok {
+		data.Theme = types.StringValue(v)
+	} else if api.Theme != "" {
+		resp.Diagnostics.AddWarning(
+			"Unknown status page theme",
+			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
+		)
+	}
+	if v, ok := localeFromProto(api.DefaultLocale); ok {
+		data.DefaultLocale = types.StringValue(v)
+	} else if api.DefaultLocale != "" {
+		resp.Diagnostics.AddWarning(
+			"Unknown status page default locale",
+			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.DefaultLocale),
+		)
+	}
+	tfLocales := make([]string, 0, len(api.Locales))
+	for _, l := range api.Locales {
+		if v, ok := localeFromProto(l); ok {
+			tfLocales = append(tfLocales, v)
+		} else {
+			resp.Diagnostics.AddWarning(
+				"Unknown status page locale",
+				fmt.Sprintf("OpenStatus returned locale %q which this provider version does not recognize.", l),
+			)
+		}
+	}
+	localesList, localesDiags := types.ListValueFrom(ctx, types.StringType, tfLocales)
+	resp.Diagnostics.Append(localesDiags...)
+	data.Locales = localesList
+	data.AllowIndex = types.BoolValue(api.AllowIndex)
+	data.AllowedIPRanges = types.StringValue(api.AllowedIPRanges)
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 
