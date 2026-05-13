@@ -16,3 +16,12 @@ resource "openstatus_notification" "email" {
     email = "oncall@example.com"
   }
 }
+
+resource "openstatus_notification" "teams" {
+  name          = "Teams Alerts"
+  provider_type = "ms_teams"
+
+  ms_teams {
+    webhook_url = "https://prod-00.westeurope.logic.azure.com:443/workflows/abc/triggers/manual/paths/invoke"
+  }
+}

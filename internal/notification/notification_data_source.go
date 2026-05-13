@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"fmt"
 
 	"terraform-provider-openstatus/internal/client"
 
@@ -83,6 +84,15 @@ func (d *notificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 
 	if pt, ok := providerTypeFromAPI[api.Provider]; ok {
 		data.ProviderType = types.StringValue(pt)
+	} else {
+		resp.Diagnostics.AddWarning(
+			"Unknown notification provider",
+			fmt.Sprintf(
+				"OpenStatus returned provider %q which this provider version does not recognize. "+
+					"State for notification %q may be incomplete; upgrade the openstatus provider to manage this resource.",
+				api.Provider, api.ID,
+			),
+		)
 	}
 
 	if len(api.MonitorIDs) > 0 {

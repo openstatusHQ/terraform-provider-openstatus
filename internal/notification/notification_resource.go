@@ -2,6 +2,7 @@ package notification
 
 import (
 	"context"
+	"fmt"
 
 	"terraform-provider-openstatus/internal/client"
 
@@ -41,18 +42,19 @@ type notificationModel struct {
 	CreatedAt    types.String `tfsdk:"created_at"`
 	UpdatedAt    types.String `tfsdk:"updated_at"`
 
-	Discord      types.List `tfsdk:"discord"`
-	Email        types.List `tfsdk:"email"`
-	Slack        types.List `tfsdk:"slack"`
-	PagerDuty    types.List `tfsdk:"pagerduty"`
-	Opsgenie     types.List `tfsdk:"opsgenie"`
-	Webhook      types.List `tfsdk:"webhook"`
-	Telegram     types.List `tfsdk:"telegram"`
-	SMS          types.List `tfsdk:"sms"`
-	WhatsApp     types.List `tfsdk:"whatsapp"`
-	GoogleChat   types.List `tfsdk:"google_chat"`
+	Discord       types.List `tfsdk:"discord"`
+	Email         types.List `tfsdk:"email"`
+	Slack         types.List `tfsdk:"slack"`
+	PagerDuty     types.List `tfsdk:"pagerduty"`
+	Opsgenie      types.List `tfsdk:"opsgenie"`
+	Webhook       types.List `tfsdk:"webhook"`
+	Telegram      types.List `tfsdk:"telegram"`
+	SMS           types.List `tfsdk:"sms"`
+	WhatsApp      types.List `tfsdk:"whatsapp"`
+	GoogleChat    types.List `tfsdk:"google_chat"`
 	GrafanaOncall types.List `tfsdk:"grafana_oncall"`
-	Ntfy         types.List `tfsdk:"ntfy"`
+	Ntfy          types.List `tfsdk:"ntfy"`
+	MSTeams       types.List `tfsdk:"ms_teams"`
 }
 
 func (r *notificationResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -75,6 +77,7 @@ func (r *notificationResource) Schema(_ context.Context, _ resource.SchemaReques
 	providerTypes := []string{
 		"discord", "email", "slack", "pagerduty", "opsgenie", "webhook",
 		"telegram", "sms", "whatsapp", "google_chat", "grafana_oncall", "ntfy",
+		"ms_teams",
 	}
 
 	resp.Schema = schema.Schema{
@@ -85,7 +88,8 @@ func (r *notificationResource) Schema(_ context.Context, _ resource.SchemaReques
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 			"name": schema.StringAttribute{
-				Optional: true,
+				Required:   true,
+				Validators: []validator.String{stringvalidator.LengthAtLeast(1)},
 			},
 			"provider_type": schema.StringAttribute{
 				Required:   true,
@@ -202,6 +206,13 @@ func (r *notificationResource) Schema(_ context.Context, _ resource.SchemaReques
 					},
 				},
 			},
+			"ms_teams": schema.ListNestedBlock{
+				NestedObject: schema.NestedBlockObject{
+					Attributes: map[string]schema.Attribute{
+						"webhook_url": schema.StringAttribute{Required: true, Sensitive: true},
+					},
+				},
+			},
 		},
 	}
 }
@@ -219,6 +230,7 @@ var providerTypeToAPI = map[string]string{
 	"google_chat":    "NOTIFICATION_PROVIDER_GOOGLE_CHAT",
 	"grafana_oncall": "NOTIFICATION_PROVIDER_GRAFANA_ONCALL",
 	"ntfy":           "NOTIFICATION_PROVIDER_NTFY",
+	"ms_teams":       "NOTIFICATION_PROVIDER_MS_TEAMS",
 }
 
 var providerTypeFromAPI = func() map[string]string {
@@ -250,10 +262,11 @@ type apiNotificationCreateRequest struct {
 }
 
 type apiNotificationUpdateRequest struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name,omitempty"`
-	Data       map[string]interface{} `json:"data,omitempty"`
-	MonitorIDs []string               `json:"monitorIds,omitempty"`
+	ID               string                 `json:"id"`
+	Name             string                 `json:"name,omitempty"`
+	Data             map[string]interface{} `json:"data,omitempty"`
+	MonitorIDs       []string               `json:"monitorIds"`
+	UpdateMonitorIDs bool                   `json:"updateMonitorIds"`
 }
 
 type apiNotificationResponse struct {
@@ -336,16 +349,17 @@ func (r *notificationResource) Update(ctx context.Context, req resource.UpdateRe
 		return
 	}
 
-	var monitorIDs []string
+	monitorIDs := []string{}
 	if !data.MonitorIDs.IsNull() && !data.MonitorIDs.IsUnknown() {
 		resp.Diagnostics.Append(data.MonitorIDs.ElementsAs(ctx, &monitorIDs, false)...)
 	}
 
 	updateReq := apiNotificationUpdateRequest{
-		ID:         state.ID.ValueString(),
-		Name:       data.Name.ValueString(),
-		Data:       providerData,
-		MonitorIDs: monitorIDs,
+		ID:               state.ID.ValueString(),
+		Name:             data.Name.ValueString(),
+		Data:             providerData,
+		MonitorIDs:       monitorIDs,
+		UpdateMonitorIDs: true,
 	}
 
 	var apiResp apiNotificationResponse
@@ -449,6 +463,9 @@ func extractProviderData(ctx context.Context, data notificationModel) (map[strin
 	case "ntfy":
 		wrapKey = "ntfy"
 		inner, diags = extractNtfyBlock(ctx, data.Ntfy, &diags)
+	case "ms_teams":
+		wrapKey = "msTeams"
+		inner, diags = extractWebhookBlock(ctx, data.MSTeams, &diags)
 	}
 
 	if diags.HasError() {
@@ -554,6 +571,15 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 
 	if pt, ok := providerTypeFromAPI[api.Provider]; ok {
 		data.ProviderType = types.StringValue(pt)
+	} else {
+		diags.AddWarning(
+			"Unknown notification provider",
+			fmt.Sprintf(
+				"OpenStatus returned provider %q which this provider version does not recognize. "+
+					"State for notification %q may be incomplete; upgrade the openstatus provider to manage this resource.",
+				api.Provider, api.ID,
+			),
+		)
 	}
 
 	if len(api.MonitorIDs) > 0 {
@@ -589,6 +615,7 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 	googleChatType := map[string]attr.Type{"webhook_url": types.StringType}
 	grafanaOncallType := map[string]attr.Type{"webhook_url": types.StringType}
 	ntfyType := map[string]attr.Type{"topic": types.StringType, "server_url": types.StringType, "token": types.StringType}
+	msTeamsType := map[string]attr.Type{"webhook_url": types.StringType}
 
 	data.Discord = nullList(discordType)
 	data.Email = nullList(emailType)
@@ -602,6 +629,7 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 	data.GoogleChat = nullList(googleChatType)
 	data.GrafanaOncall = nullList(grafanaOncallType)
 	data.Ntfy = nullList(ntfyType)
+	data.MSTeams = nullList(msTeamsType)
 
 	switch pt {
 	case "discord":
@@ -624,6 +652,15 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 		region := strFromData(apiData, "region")
 		if r, ok := opsgenieRegionFromAPI[region]; ok {
 			region = r
+		} else if region != "" {
+			diags.AddWarning(
+				"Unknown Opsgenie region",
+				fmt.Sprintf(
+					"OpenStatus returned Opsgenie region %q which this provider version does not recognize. "+
+						"State for notification %q may show the raw enum value.",
+					region, api.ID,
+				),
+			)
 		}
 		data.Opsgenie = buildSingleObjList(ctx, opsgenieType, map[string]attr.Value{
 			"api_key": types.StringValue(strFromData(apiData, "apiKey")),
@@ -677,6 +714,10 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 			"server_url": types.StringValue(strFromData(apiData, "serverUrl")),
 			"token":      types.StringValue(strFromData(apiData, "token")),
 		}, &diags)
+	case "ms_teams":
+		data.MSTeams = buildSingleObjList(ctx, msTeamsType, map[string]attr.Value{
+			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+		}, &diags)
 	}
 
 	return diags
@@ -721,6 +762,7 @@ var providerTypeToWrapKey = map[string]string{
 	"google_chat":    "googleChat",
 	"grafana_oncall": "grafanaOncall",
 	"ntfy":           "ntfy",
+	"ms_teams":       "msTeams",
 }
 
 func unwrapProviderData(data map[string]interface{}, providerType string) map[string]interface{} {
