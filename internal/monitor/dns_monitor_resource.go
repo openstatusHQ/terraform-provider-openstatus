@@ -47,6 +47,7 @@ type dnsMonitorModel struct {
 	Description      types.String `tfsdk:"description"`
 	Regions          types.Set    `tfsdk:"regions"`
 	RecordAssertions types.List   `tfsdk:"record_assertions"`
+	OpenTelemetry    types.Object `tfsdk:"open_telemetry"`
 	Status           types.String `tfsdk:"status"`
 }
 
@@ -147,24 +148,26 @@ func (r *dnsMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 					},
 				},
 			},
+			"open_telemetry": openTelemetrySchemaBlock(),
 		},
 	}
 }
 
 type dnsMonitorAPIObject struct {
-	ID               string                `json:"id,omitempty"`
-	Name             string                `json:"name"`
-	URI              string                `json:"uri"`
-	Periodicity      string                `json:"periodicity"`
-	Timeout          jsonInt64             `json:"timeout,omitempty"`
-	DegradedAt       jsonInt64             `json:"degradedAt,omitempty"`
-	Retry            jsonInt64             `json:"retry,omitempty"`
-	Active           bool                  `json:"active"`
-	Public           bool                  `json:"public"`
-	Description      string                `json:"description,omitempty"`
-	Regions          []string              `json:"regions,omitempty"`
-	RecordAssertions []apiRecordAssertion  `json:"recordAssertions,omitempty"`
-	Status           string                `json:"status,omitempty"`
+	ID               string               `json:"id,omitempty"`
+	Name             string               `json:"name"`
+	URI              string               `json:"uri"`
+	Periodicity      string               `json:"periodicity"`
+	Timeout          jsonInt64            `json:"timeout"`
+	DegradedAt       jsonInt64            `json:"degradedAt,omitempty"`
+	Retry            jsonInt64            `json:"retry"`
+	Active           bool                 `json:"active"`
+	Public           bool                 `json:"public"`
+	Description      string               `json:"description"`
+	Regions          []string             `json:"regions,omitempty"`
+	RecordAssertions []apiRecordAssertion `json:"recordAssertions,omitempty"`
+	OpenTelemetry    *apiOpenTelemetry    `json:"openTelemetry"`
+	Status           string               `json:"status,omitempty"`
 }
 
 type apiRecordAssertion struct {
@@ -331,6 +334,12 @@ func dnsModelToAPI(ctx context.Context, data dnsMonitorModel) (dnsMonitorAPIObje
 		}
 	}
 
+	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
+	diags.Append(otelDiags...)
+	if diags.HasError() {
+		return dnsMonitorAPIObject{}, diags
+	}
+
 	return dnsMonitorAPIObject{
 		Name:             data.Name.ValueString(),
 		URI:              data.URI.ValueString(),
@@ -343,6 +352,7 @@ func dnsModelToAPI(ctx context.Context, data dnsMonitorModel) (dnsMonitorAPIObje
 		Description:      data.Description.ValueString(),
 		Regions:          regions,
 		RecordAssertions: recordAssertions,
+		OpenTelemetry:    otel,
 	}, diags
 }
 
@@ -387,6 +397,10 @@ func dnsAPIToModel(ctx context.Context, api dnsMonitorAPIObject, data *dnsMonito
 		diags.Append(d...)
 		data.RecordAssertions = list
 	}
+
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	diags.Append(otelDiags...)
+	data.OpenTelemetry = otelObj
 
 	return diags
 }

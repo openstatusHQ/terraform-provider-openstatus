@@ -33,18 +33,19 @@ type tcpMonitorResource struct {
 }
 
 type tcpMonitorModel struct {
-	ID          types.String `tfsdk:"id"`
-	Name        types.String `tfsdk:"name"`
-	URI         types.String `tfsdk:"uri"`
-	Periodicity types.String `tfsdk:"periodicity"`
-	Timeout     types.Int64  `tfsdk:"timeout"`
-	DegradedAt  types.Int64  `tfsdk:"degraded_at"`
-	Retry       types.Int64  `tfsdk:"retry"`
-	Active      types.Bool   `tfsdk:"active"`
-	Public      types.Bool   `tfsdk:"public"`
-	Description types.String `tfsdk:"description"`
-	Regions     types.Set    `tfsdk:"regions"`
-	Status      types.String `tfsdk:"status"`
+	ID            types.String `tfsdk:"id"`
+	Name          types.String `tfsdk:"name"`
+	URI           types.String `tfsdk:"uri"`
+	Periodicity   types.String `tfsdk:"periodicity"`
+	Timeout       types.Int64  `tfsdk:"timeout"`
+	DegradedAt    types.Int64  `tfsdk:"degraded_at"`
+	Retry         types.Int64  `tfsdk:"retry"`
+	Active        types.Bool   `tfsdk:"active"`
+	Public        types.Bool   `tfsdk:"public"`
+	Description   types.String `tfsdk:"description"`
+	Regions       types.Set    `tfsdk:"regions"`
+	OpenTelemetry types.Object `tfsdk:"open_telemetry"`
+	Status        types.String `tfsdk:"status"`
 }
 
 func (r *tcpMonitorResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -119,22 +120,26 @@ func (r *tcpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
 			},
 		},
+		Blocks: map[string]schema.Block{
+			"open_telemetry": openTelemetrySchemaBlock(),
+		},
 	}
 }
 
 type tcpMonitorAPIObject struct {
-	ID          string    `json:"id,omitempty"`
-	Name        string    `json:"name"`
-	URI         string    `json:"uri"`
-	Periodicity string    `json:"periodicity"`
-	Timeout     jsonInt64 `json:"timeout,omitempty"`
-	DegradedAt  jsonInt64 `json:"degradedAt,omitempty"`
-	Retry       jsonInt64 `json:"retry,omitempty"`
-	Active      bool     `json:"active"`
-	Public      bool     `json:"public"`
-	Description string   `json:"description,omitempty"`
-	Regions     []string `json:"regions,omitempty"`
-	Status      string   `json:"status,omitempty"`
+	ID            string            `json:"id,omitempty"`
+	Name          string            `json:"name"`
+	URI           string            `json:"uri"`
+	Periodicity   string            `json:"periodicity"`
+	Timeout       jsonInt64         `json:"timeout"`
+	DegradedAt    jsonInt64         `json:"degradedAt,omitempty"`
+	Retry         jsonInt64         `json:"retry"`
+	Active        bool              `json:"active"`
+	Public        bool              `json:"public"`
+	Description   string            `json:"description"`
+	Regions       []string          `json:"regions,omitempty"`
+	OpenTelemetry *apiOpenTelemetry `json:"openTelemetry"`
+	Status        string            `json:"status,omitempty"`
 }
 
 type tcpMonitorAPIRequest struct {
@@ -275,17 +280,24 @@ func tcpModelToAPI(ctx context.Context, data tcpMonitorModel) (tcpMonitorAPIObje
 		}
 	}
 
+	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
+	diags.Append(otelDiags...)
+	if diags.HasError() {
+		return tcpMonitorAPIObject{}, diags
+	}
+
 	return tcpMonitorAPIObject{
-		Name:        data.Name.ValueString(),
-		URI:         data.URI.ValueString(),
-		Periodicity: periodicity,
-		Timeout:     jsonInt64(data.Timeout.ValueInt64()),
-		DegradedAt:  jsonInt64(data.DegradedAt.ValueInt64()),
-		Retry:       jsonInt64(data.Retry.ValueInt64()),
-		Active:      data.Active.ValueBool(),
-		Public:      data.Public.ValueBool(),
-		Description: data.Description.ValueString(),
-		Regions:     regions,
+		Name:          data.Name.ValueString(),
+		URI:           data.URI.ValueString(),
+		Periodicity:   periodicity,
+		Timeout:       jsonInt64(data.Timeout.ValueInt64()),
+		DegradedAt:    jsonInt64(data.DegradedAt.ValueInt64()),
+		Retry:         jsonInt64(data.Retry.ValueInt64()),
+		Active:        data.Active.ValueBool(),
+		Public:        data.Public.ValueBool(),
+		Description:   data.Description.ValueString(),
+		Regions:       regions,
+		OpenTelemetry: otel,
 	}, diags
 }
 
@@ -314,6 +326,10 @@ func tcpAPIToModel(ctx context.Context, api tcpMonitorAPIObject, data *tcpMonito
 	} else if !data.Regions.IsNull() {
 		data.Regions = types.SetNull(types.StringType)
 	}
+
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	diags.Append(otelDiags...)
+	data.OpenTelemetry = otelObj
 
 	return diags
 }

@@ -54,6 +54,7 @@ type httpMonitorModel struct {
 	StatusCodeAssertions types.List   `tfsdk:"status_code_assertions"`
 	BodyAssertions       types.List   `tfsdk:"body_assertions"`
 	HeaderAssertions     types.List   `tfsdk:"header_assertions"`
+	OpenTelemetry        types.Object `tfsdk:"open_telemetry"`
 	Status               types.String `tfsdk:"status"`
 }
 
@@ -237,6 +238,7 @@ func (r *httpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest
 					},
 				},
 			},
+			"open_telemetry": openTelemetrySchemaBlock(),
 		},
 	}
 }
@@ -251,30 +253,26 @@ type httpMonitorAPIUpdateRequest struct {
 }
 
 type httpMonitorAPIObject struct {
-	ID                   string                       `json:"id,omitempty"`
-	Name                 string                       `json:"name"`
-	URL                  string                       `json:"url"`
-	Periodicity          string                       `json:"periodicity"`
-	Method               string                       `json:"method,omitempty"`
-	Body                 string                       `json:"body,omitempty"`
-	Timeout              jsonInt64                    `json:"timeout,omitempty"`
-	DegradedAt           jsonInt64                    `json:"degradedAt,omitempty"`
-	Retry                jsonInt64                    `json:"retry,omitempty"`
-	FollowRedirects      bool                         `json:"followRedirects"`
-	Active               bool                         `json:"active"`
-	Public               bool                         `json:"public"`
-	Description          string                       `json:"description,omitempty"`
-	Regions              []string                     `json:"regions,omitempty"`
-	Headers              []apiHeader                  `json:"headers,omitempty"`
-	StatusCodeAssertions []apiStatusCodeAssertion     `json:"statusCodeAssertions,omitempty"`
-	BodyAssertions       []apiBodyAssertion           `json:"bodyAssertions,omitempty"`
-	HeaderAssertions     []apiHeaderAssertion         `json:"headerAssertions,omitempty"`
-	Status               string                       `json:"status,omitempty"`
-}
-
-type apiHeader struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
+	ID                   string                   `json:"id,omitempty"`
+	Name                 string                   `json:"name"`
+	URL                  string                   `json:"url"`
+	Periodicity          string                   `json:"periodicity"`
+	Method               string                   `json:"method,omitempty"`
+	Body                 string                   `json:"body"`
+	Timeout              jsonInt64                `json:"timeout"`
+	DegradedAt           jsonInt64                `json:"degradedAt,omitempty"`
+	Retry                jsonInt64                `json:"retry"`
+	FollowRedirects      bool                     `json:"followRedirects"`
+	Active               bool                     `json:"active"`
+	Public               bool                     `json:"public"`
+	Description          string                   `json:"description"`
+	Regions              []string                 `json:"regions,omitempty"`
+	Headers              []apiHeader              `json:"headers,omitempty"`
+	StatusCodeAssertions []apiStatusCodeAssertion `json:"statusCodeAssertions,omitempty"`
+	BodyAssertions       []apiBodyAssertion       `json:"bodyAssertions,omitempty"`
+	HeaderAssertions     []apiHeaderAssertion     `json:"headerAssertions,omitempty"`
+	OpenTelemetry        *apiOpenTelemetry        `json:"openTelemetry"`
+	Status               string                   `json:"status,omitempty"`
 }
 
 type apiStatusCodeAssertion struct {
@@ -506,6 +504,12 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 		}
 	}
 
+	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
+	diags.Append(otelDiags...)
+	if diags.HasError() {
+		return httpMonitorAPIObject{}, diags
+	}
+
 	return httpMonitorAPIObject{
 		Name:                 data.Name.ValueString(),
 		URL:                  data.URL.ValueString(),
@@ -524,6 +528,7 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 		StatusCodeAssertions: statusCodeAssertions,
 		BodyAssertions:       bodyAssertions,
 		HeaderAssertions:     headerAssertions,
+		OpenTelemetry:        otel,
 	}, diags
 }
 
@@ -616,6 +621,10 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 		diags.Append(d...)
 		data.HeaderAssertions = list
 	}
+
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	diags.Append(otelDiags...)
+	data.OpenTelemetry = otelObj
 
 	return diags
 }

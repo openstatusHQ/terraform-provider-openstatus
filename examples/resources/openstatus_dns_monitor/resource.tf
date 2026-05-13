@@ -10,4 +10,8 @@ resource "openstatus_dns_monitor" "main" {
     comparator = "eq"
     target     = "93.184.216.34"
   }
+
+  open_telemetry {
+    endpoint = "https://otel.example.com/v1/metrics"
+  }
 }

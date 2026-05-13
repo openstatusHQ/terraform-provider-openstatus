@@ -36,6 +36,30 @@ func TestTCPMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
 	}
 }
 
+func TestTCPMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
+	obj := tcpMonitorAPIObject{
+		Name:        "m",
+		URI:         "example.com:443",
+		Periodicity: "PERIODICITY_1M",
+		Description: "",
+		Timeout:     0,
+		Retry:       0,
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, field := range []string{"description", "timeout", "retry"} {
+		if _, ok := raw[field]; !ok {
+			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
+		}
+	}
+}
+
 func TestGetMonitorResponse_NestedMonitorWrapper_TCP(t *testing.T) {
 	apiJSON := `{"monitor":{"tcp":{"name":"Orbula","uri":"v3.license.containous.cloud:443"}}}`
 
