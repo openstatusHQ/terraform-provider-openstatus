@@ -2,15 +2,19 @@ package statuspage
 
 import (
 	"context"
+	"fmt"
+	"regexp"
 
 	"terraform-provider-openstatus/internal/client"
 
+	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringdefault"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -45,11 +49,17 @@ type statusPageModel struct {
 	AccessType       types.String `tfsdk:"access_type"`
 	Password         types.String `tfsdk:"password"`
 	AuthEmailDomains types.List   `tfsdk:"auth_email_domains"`
+	AllowedIPRanges  types.String `tfsdk:"allowed_ip_ranges"`
 	Published        types.Bool   `tfsdk:"published"`
 	Theme            types.String `tfsdk:"theme"`
+	DefaultLocale    types.String `tfsdk:"default_locale"`
+	Locales          types.List   `tfsdk:"locales"`
+	AllowIndex       types.Bool   `tfsdk:"allow_index"`
 	CreatedAt        types.String `tfsdk:"created_at"`
 	UpdatedAt        types.String `tfsdk:"updated_at"`
 }
+
+var slugPattern = regexp.MustCompile(`^[a-z0-9]+(?:-[a-z0-9]+)*$`)
 
 func (r *statusPageResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
 	resp.TypeName = req.ProviderTypeName + "_status_page"
@@ -77,8 +87,14 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Validators: []validator.String{stringvalidator.LengthBetween(1, 256)},
 			},
 			"slug": schema.StringAttribute{
-				Required:   true,
-				Validators: []validator.String{stringvalidator.LengthBetween(1, 256)},
+				Required: true,
+				Validators: []validator.String{
+					stringvalidator.LengthBetween(1, 256),
+					stringvalidator.RegexMatches(
+						slugPattern,
+						`must be lowercase alphanumeric with hyphens between segments (e.g. "my-status-page")`,
+					),
+				},
 			},
 			"description": schema.StringAttribute{
 				Optional:   true,
@@ -101,8 +117,8 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"access_type": schema.StringAttribute{
 				Optional:            true,
 				Computed:            true,
-				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`.",
-				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain")},
+				MarkdownDescription: "Access type of the status page. One of: `public`, `password`, `email-domain`, `ip`.",
+				Validators:          []validator.String{stringvalidator.OneOf("public", "password", "email-domain", "ip")},
 				PlanModifiers:       keepState,
 			},
 			"password": schema.StringAttribute{
@@ -111,14 +127,40 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				MarkdownDescription: "Password to protect the status page. Required when `access_type` is `password`.",
 			},
 			"auth_email_domains": schema.ListAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 				MarkdownDescription: "List of email domains allowed to access the page. Used when `access_type` is `email-domain`.",
 			},
+			"allowed_ip_ranges": schema.StringAttribute{
+				Optional:            true,
+				MarkdownDescription: "Comma-separated IPv4 CIDR ranges. Required when `access_type` is `ip`.",
+			},
 			"published": schema.BoolAttribute{Computed: true},
-			"theme":     schema.StringAttribute{Computed: true},
-			"created_at":    schema.StringAttribute{Computed: true},
-			"updated_at":    schema.StringAttribute{Computed: true},
+			"theme": schema.StringAttribute{
+				Optional:   true,
+				Computed:   true,
+				Default:    stringdefault.StaticString("system"),
+				Validators: []validator.String{stringvalidator.OneOf("system", "light", "dark")},
+			},
+			"default_locale": schema.StringAttribute{
+				Optional:   true,
+				Computed:   true,
+				Default:    stringdefault.StaticString("en"),
+				Validators: []validator.String{stringvalidator.OneOf("en", "fr", "de")},
+			},
+			"locales": schema.ListAttribute{
+				Optional:    true,
+				ElementType: types.StringType,
+				Validators: []validator.List{
+					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de")),
+				},
+			},
+			"allow_index": schema.BoolAttribute{
+				Optional: true,
+				Computed: true,
+			},
+			"created_at": schema.StringAttribute{Computed: true},
+			"updated_at": schema.StringAttribute{Computed: true},
 		},
 	}
 }
@@ -133,6 +175,7 @@ func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.Va
 	accessType := data.AccessType.ValueString()
 	hasPassword := !data.Password.IsNull() && !data.Password.IsUnknown()
 	hasEmailDomains := !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown()
+	hasIPRanges := !data.AllowedIPRanges.IsNull() && !data.AllowedIPRanges.IsUnknown()
 
 	if accessType == "password" && !hasPassword {
 		resp.Diagnostics.AddAttributeError(
@@ -146,6 +189,13 @@ func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.Va
 			path.Root("auth_email_domains"),
 			"Missing required attribute",
 			"auth_email_domains is required when access_type is \"email-domain\".",
+		)
+	}
+	if accessType == "ip" && !hasIPRanges {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allowed_ip_ranges"),
+			"Missing required attribute",
+			"allowed_ip_ranges is required when access_type is \"ip\".",
 		)
 	}
 	if hasPassword && accessType != "password" {
@@ -162,6 +212,13 @@ func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.Va
 			"auth_email_domains can only be set when access_type is \"email-domain\".",
 		)
 	}
+	if hasIPRanges && accessType != "ip" {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("allowed_ip_ranges"),
+			"Invalid attribute combination",
+			"allowed_ip_ranges can only be set when access_type is \"ip\".",
+		)
+	}
 }
 
 type apiStatusPageCreateRequest struct {
@@ -176,6 +233,10 @@ type apiStatusPageCreateRequest struct {
 	AccessType       string   `json:"accessType,omitempty"`
 	Password         string   `json:"password,omitempty"`
 	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
+	AllowedIPRanges  string   `json:"allowedIpRanges,omitempty"`
+	DefaultLocale    string   `json:"defaultLocale,omitempty"`
+	Locales          []string `json:"locales,omitempty"`
+	AllowIndex       *bool    `json:"allowIndex,omitempty"`
 }
 
 type apiStatusPageUpdateRequest struct {
@@ -190,6 +251,11 @@ type apiStatusPageUpdateRequest struct {
 	AccessType       *string   `json:"accessType,omitempty"`
 	Password         *string   `json:"password,omitempty"`
 	AuthEmailDomains *[]string `json:"authEmailDomains,omitempty"`
+	AllowedIPRanges  *string   `json:"allowedIpRanges,omitempty"`
+	Theme            *string   `json:"theme,omitempty"`
+	DefaultLocale    *string   `json:"defaultLocale,omitempty"`
+	Locales          *[]string `json:"locales,omitempty"`
+	AllowIndex       *bool     `json:"allowIndex,omitempty"`
 }
 
 type apiStatusPageResponse struct {
@@ -209,7 +275,11 @@ type apiStatusPage struct {
 	AccessType       string   `json:"accessType"`
 	Password         string   `json:"password"`
 	AuthEmailDomains []string `json:"authEmailDomains"`
+	AllowedIPRanges  string   `json:"allowedIpRanges"`
 	Theme            string   `json:"theme"`
+	DefaultLocale    string   `json:"defaultLocale"`
+	Locales          []string `json:"locales"`
+	AllowIndex       bool     `json:"allowIndex"`
 	CreatedAt        string   `json:"createdAt"`
 	UpdatedAt        string   `json:"updatedAt"`
 }
@@ -222,15 +292,18 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 	}
 
 	apiReq := apiStatusPageCreateRequest{
-		Title:       data.Title.ValueString(),
-		Slug:        data.Slug.ValueString(),
-		Description: data.Description.ValueString(),
-		HomepageURL: data.HomepageURL.ValueString(),
-		ContactURL:  data.ContactURL.ValueString(),
-		Icon:        data.Icon.ValueString(),
-		CustomDomain: data.CustomDomain.ValueString(),
-		AccessType:  accessTypeToProto(data.AccessType.ValueString()),
-		Password:    data.Password.ValueString(),
+		Title:           data.Title.ValueString(),
+		Slug:            data.Slug.ValueString(),
+		Description:     data.Description.ValueString(),
+		HomepageURL:     data.HomepageURL.ValueString(),
+		ContactURL:      data.ContactURL.ValueString(),
+		Icon:            data.Icon.ValueString(),
+		CustomDomain:    data.CustomDomain.ValueString(),
+		AccessType:      accessTypeToProto(data.AccessType.ValueString()),
+		Password:        data.Password.ValueString(),
+		AllowedIPRanges: data.AllowedIPRanges.ValueString(),
+		Theme:           themeToProto(data.Theme.ValueString()),
+		DefaultLocale:   localeToProto(data.DefaultLocale.ValueString()),
 	}
 
 	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
@@ -240,6 +313,24 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 			return
 		}
 		apiReq.AuthEmailDomains = domains
+	}
+
+	if !data.Locales.IsNull() && !data.Locales.IsUnknown() {
+		var tfLocales []string
+		resp.Diagnostics.Append(data.Locales.ElementsAs(ctx, &tfLocales, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		apiLocales := make([]string, 0, len(tfLocales))
+		for _, l := range tfLocales {
+			apiLocales = append(apiLocales, localeToProto(l))
+		}
+		apiReq.Locales = apiLocales
+	}
+
+	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
+		v := data.AllowIndex.ValueBool()
+		apiReq.AllowIndex = &v
 	}
 
 	var apiResp apiStatusPageResponse
@@ -332,6 +423,34 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 		}
 		updateReq.AuthEmailDomains = &domains
 	}
+	if !data.AllowedIPRanges.IsNull() && !data.AllowedIPRanges.IsUnknown() {
+		v := data.AllowedIPRanges.ValueString()
+		updateReq.AllowedIPRanges = &v
+	}
+	if !data.Theme.IsNull() && !data.Theme.IsUnknown() {
+		v := themeToProto(data.Theme.ValueString())
+		updateReq.Theme = &v
+	}
+	if !data.DefaultLocale.IsNull() && !data.DefaultLocale.IsUnknown() {
+		v := localeToProto(data.DefaultLocale.ValueString())
+		updateReq.DefaultLocale = &v
+	}
+	if !data.Locales.IsNull() && !data.Locales.IsUnknown() {
+		var tfLocales []string
+		resp.Diagnostics.Append(data.Locales.ElementsAs(ctx, &tfLocales, false)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		apiLocales := make([]string, 0, len(tfLocales))
+		for _, l := range tfLocales {
+			apiLocales = append(apiLocales, localeToProto(l))
+		}
+		updateReq.Locales = &apiLocales
+	}
+	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
+		v := data.AllowIndex.ValueBool()
+		updateReq.AllowIndex = &v
+	}
 
 	var apiResp apiStatusPageResponse
 	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/UpdateStatusPage", updateReq, &apiResp)
@@ -362,7 +481,6 @@ func (r *statusPageResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-// accessTypeToProto converts a Terraform access_type value to the proto enum string.
 func accessTypeToProto(tf string) string {
 	switch tf {
 	case "public":
@@ -371,37 +489,72 @@ func accessTypeToProto(tf string) string {
 		return "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED"
 	case "email-domain":
 		return "PAGE_ACCESS_TYPE_AUTHENTICATED"
-	default:
-		return ""
+	case "ip":
+		return "PAGE_ACCESS_TYPE_IP_RESTRICTED"
 	}
+	return ""
 }
 
-// accessTypeFromProto converts a proto enum string to the Terraform access_type value.
-func accessTypeFromProto(proto string) string {
+func accessTypeFromProto(proto string) (string, bool) {
 	switch proto {
 	case "PAGE_ACCESS_TYPE_PUBLIC":
-		return "public"
+		return "public", true
 	case "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED":
-		return "password"
+		return "password", true
 	case "PAGE_ACCESS_TYPE_AUTHENTICATED":
-		return "email-domain"
-	default:
-		return "public"
+		return "email-domain", true
+	case "PAGE_ACCESS_TYPE_IP_RESTRICTED":
+		return "ip", true
 	}
+	return "", false
 }
 
-// themeFromProto converts a proto theme enum string to a friendly Terraform value.
-func themeFromProto(proto string) string {
+func themeToProto(tf string) string {
+	switch tf {
+	case "system":
+		return "PAGE_THEME_SYSTEM"
+	case "light":
+		return "PAGE_THEME_LIGHT"
+	case "dark":
+		return "PAGE_THEME_DARK"
+	}
+	return ""
+}
+
+func themeFromProto(proto string) (string, bool) {
 	switch proto {
 	case "PAGE_THEME_SYSTEM":
-		return "system"
+		return "system", true
 	case "PAGE_THEME_LIGHT":
-		return "light"
+		return "light", true
 	case "PAGE_THEME_DARK":
-		return "dark"
-	default:
-		return "system"
+		return "dark", true
 	}
+	return "", false
+}
+
+func localeToProto(tf string) string {
+	switch tf {
+	case "en":
+		return "LOCALE_EN"
+	case "fr":
+		return "LOCALE_FR"
+	case "de":
+		return "LOCALE_DE"
+	}
+	return ""
+}
+
+func localeFromProto(proto string) (string, bool) {
+	switch proto {
+	case "LOCALE_EN":
+		return "en", true
+	case "LOCALE_FR":
+		return "fr", true
+	case "LOCALE_DE":
+		return "de", true
+	}
+	return "", false
 }
 
 // statusPageAPIToModel maps an API response to the Terraform model.
@@ -425,7 +578,14 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 		data.CustomDomain = types.StringValue(api.CustomDomain)
 	}
 	data.Published = types.BoolValue(api.Published)
-	data.AccessType = types.StringValue(accessTypeFromProto(api.AccessType))
+	if v, ok := accessTypeFromProto(api.AccessType); ok {
+		data.AccessType = types.StringValue(v)
+	} else if api.AccessType != "" {
+		diags.AddWarning(
+			"Unknown status page access type",
+			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.AccessType),
+		)
+	}
 	if api.Password != "" {
 		data.Password = types.StringValue(api.Password)
 	}
@@ -434,7 +594,42 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 		diags.Append(listDiags...)
 		data.AuthEmailDomains = list
 	}
-	data.Theme = types.StringValue(themeFromProto(api.Theme))
+	if v, ok := themeFromProto(api.Theme); ok {
+		data.Theme = types.StringValue(v)
+	} else if api.Theme != "" {
+		diags.AddWarning(
+			"Unknown status page theme",
+			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
+		)
+	}
+	if v, ok := localeFromProto(api.DefaultLocale); ok {
+		data.DefaultLocale = types.StringValue(v)
+	} else if api.DefaultLocale != "" {
+		diags.AddWarning(
+			"Unknown status page default locale",
+			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.DefaultLocale),
+		)
+	}
+	if len(api.Locales) > 0 || !data.Locales.IsNull() {
+		tfLocales := make([]string, 0, len(api.Locales))
+		for _, l := range api.Locales {
+			if v, ok := localeFromProto(l); ok {
+				tfLocales = append(tfLocales, v)
+			} else {
+				diags.AddWarning(
+					"Unknown status page locale",
+					fmt.Sprintf("OpenStatus returned locale %q which this provider version does not recognize.", l),
+				)
+			}
+		}
+		list, listDiags := types.ListValueFrom(ctx, types.StringType, tfLocales)
+		diags.Append(listDiags...)
+		data.Locales = list
+	}
+	data.AllowIndex = types.BoolValue(api.AllowIndex)
+	if api.AllowedIPRanges != "" || !data.AllowedIPRanges.IsNull() {
+		data.AllowedIPRanges = types.StringValue(api.AllowedIPRanges)
+	}
 	data.CreatedAt = types.StringValue(api.CreatedAt)
 	data.UpdatedAt = types.StringValue(api.UpdatedAt)
 }
