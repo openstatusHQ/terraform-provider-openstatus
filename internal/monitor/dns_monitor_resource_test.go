@@ -36,6 +36,30 @@ func TestDNSMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
 	}
 }
 
+func TestDNSMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
+	obj := dnsMonitorAPIObject{
+		Name:        "m",
+		URI:         "example.com",
+		Periodicity: "PERIODICITY_1M",
+		Description: "",
+		Timeout:     0,
+		Retry:       0,
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, field := range []string{"description", "timeout", "retry"} {
+		if _, ok := raw[field]; !ok {
+			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
+		}
+	}
+}
+
 func TestGetMonitorResponse_NestedMonitorWrapper_DNS(t *testing.T) {
 	apiJSON := `{"monitor":{"dns":{"name":"DNS Check","uri":"example.com"}}}`
 

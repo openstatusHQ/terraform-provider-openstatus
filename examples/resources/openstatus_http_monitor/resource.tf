@@ -21,4 +21,13 @@ resource "openstatus_http_monitor" "api" {
     target     = "ok"
     comparator = "contains"
   }
+
+  open_telemetry {
+    endpoint = "https://otel.example.com/v1/metrics"
+
+    headers {
+      key   = "X-Api-Key"
+      value = "secret"
+    }
+  }
 }

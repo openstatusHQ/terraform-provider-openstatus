@@ -37,6 +37,31 @@ func TestHTTPMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
 	}
 }
 
+func TestHTTPMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
+	obj := httpMonitorAPIObject{
+		Name:        "m",
+		URL:         "https://example.com",
+		Periodicity: "PERIODICITY_1M",
+		Body:        "",
+		Description: "",
+		Timeout:     0,
+		Retry:       0,
+	}
+	b, err := json.Marshal(obj)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(b, &raw); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	for _, field := range []string{"body", "description", "timeout", "retry"} {
+		if _, ok := raw[field]; !ok {
+			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
+		}
+	}
+}
+
 func TestGetMonitorResponse_NestedMonitorWrapper(t *testing.T) {
 	// Simulates the actual API v2 response format
 	apiJSON := `{"monitor":{"http":{"name":"Hub UI","url":"https://hub.traefik.io","followRedirects":false}}}`
