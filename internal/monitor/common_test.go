@@ -1,6 +1,8 @@
 package monitor
 
 import (
+	"sort"
+	"strings"
 	"testing"
 )
 
@@ -37,6 +39,22 @@ func TestMapPeriodicityFromAPI(t *testing.T) {
 	result := MapPeriodicityFromAPI("PERIODICITY_30S")
 	if result != "30s" {
 		t.Errorf("MapPeriodicityFromAPI(PERIODICITY_30S) = %q, want 30s", result)
+	}
+}
+
+func TestRegionValuesSorted(t *testing.T) {
+	if !sort.StringsAreSorted(RegionValues) {
+		t.Errorf("RegionValues must be sorted for deterministic docs; got %v", RegionValues)
+	}
+}
+
+func TestMapRegionsToAPI_InvalidReturnsError(t *testing.T) {
+	_, err := MapRegionsToAPI([]string{"railway-europe-ewlrljw"})
+	if err == nil {
+		t.Fatal("expected error for unknown region, got nil")
+	}
+	if !strings.Contains(err.Error(), `unknown region: "railway-europe-ewlrljw"`) {
+		t.Errorf("unexpected error message: %v", err)
 	}
 }
 
