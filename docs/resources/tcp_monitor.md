@@ -43,7 +43,7 @@ resource "openstatus_tcp_monitor" "db" {
 - `description` (String)
 - `open_telemetry` (Block, Optional) OpenTelemetry exporter configuration. (see [below for nested schema](#nestedblock--open_telemetry))
 - `public` (Boolean)
-- `regions` (Set of String)
+- `regions` (Set of String) Regions to monitor from.
 - `retry` (Number)
 - `timeout` (Number)
 
