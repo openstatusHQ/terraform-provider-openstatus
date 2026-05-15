@@ -31,7 +31,7 @@ dev: build
 # `just dev` for local iteration.
 install: build
     #!/usr/bin/env sh
-    dir=~/.terraform.d/plugins/registry.terraform.io/openstatusHQ/openstatus/0.2.0/$(go env GOOS)_$(go env GOARCH)
+    dir=~/.terraform.d/plugins/registry.terraform.io/openstatusHQ/openstatus/0.2.1/$(go env GOOS)_$(go env GOARCH)
     mkdir -p "$dir"
     cp terraform-provider-openstatus "$dir"/
 
