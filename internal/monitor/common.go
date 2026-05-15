@@ -2,6 +2,7 @@ package monitor
 
 import (
 	"fmt"
+	"sort"
 	"strings"
 )
 
@@ -19,33 +20,33 @@ var periodicityFromAPI = reverseMap(periodicityToAPI)
 var PeriodicityValues = keys(periodicityToAPI)
 
 var regionToAPI = map[string]string{
-	"fly-ams":               "REGION_FLY_AMS",
-	"fly-arn":               "REGION_FLY_ARN",
-	"fly-bom":               "REGION_FLY_BOM",
-	"fly-cdg":               "REGION_FLY_CDG",
-	"fly-dfw":               "REGION_FLY_DFW",
-	"fly-ewr":               "REGION_FLY_EWR",
-	"fly-fra":               "REGION_FLY_FRA",
-	"fly-gru":               "REGION_FLY_GRU",
-	"fly-iad":               "REGION_FLY_IAD",
-	"fly-jnb":               "REGION_FLY_JNB",
-	"fly-lax":               "REGION_FLY_LAX",
-	"fly-lhr":               "REGION_FLY_LHR",
-	"fly-nrt":               "REGION_FLY_NRT",
-	"fly-ord":               "REGION_FLY_ORD",
-	"fly-sjc":               "REGION_FLY_SJC",
-	"fly-sin":               "REGION_FLY_SIN",
-	"fly-syd":               "REGION_FLY_SYD",
-	"fly-yyz":               "REGION_FLY_YYZ",
-	"koyeb-fra":             "REGION_KOYEB_FRA",
-	"koyeb-par":             "REGION_KOYEB_PAR",
-	"koyeb-sfo":             "REGION_KOYEB_SFO",
-	"koyeb-sin":             "REGION_KOYEB_SIN",
-	"koyeb-tyo":             "REGION_KOYEB_TYO",
-	"koyeb-was":             "REGION_KOYEB_WAS",
-	"railway-us-west2":      "REGION_RAILWAY_US_WEST2",
-	"railway-us-east4":      "REGION_RAILWAY_US_EAST4",
-	"railway-europe-west4":  "REGION_RAILWAY_EUROPE_WEST4",
+	"fly-ams":                 "REGION_FLY_AMS",
+	"fly-arn":                 "REGION_FLY_ARN",
+	"fly-bom":                 "REGION_FLY_BOM",
+	"fly-cdg":                 "REGION_FLY_CDG",
+	"fly-dfw":                 "REGION_FLY_DFW",
+	"fly-ewr":                 "REGION_FLY_EWR",
+	"fly-fra":                 "REGION_FLY_FRA",
+	"fly-gru":                 "REGION_FLY_GRU",
+	"fly-iad":                 "REGION_FLY_IAD",
+	"fly-jnb":                 "REGION_FLY_JNB",
+	"fly-lax":                 "REGION_FLY_LAX",
+	"fly-lhr":                 "REGION_FLY_LHR",
+	"fly-nrt":                 "REGION_FLY_NRT",
+	"fly-ord":                 "REGION_FLY_ORD",
+	"fly-sjc":                 "REGION_FLY_SJC",
+	"fly-sin":                 "REGION_FLY_SIN",
+	"fly-syd":                 "REGION_FLY_SYD",
+	"fly-yyz":                 "REGION_FLY_YYZ",
+	"koyeb-fra":               "REGION_KOYEB_FRA",
+	"koyeb-par":               "REGION_KOYEB_PAR",
+	"koyeb-sfo":               "REGION_KOYEB_SFO",
+	"koyeb-sin":               "REGION_KOYEB_SIN",
+	"koyeb-tyo":               "REGION_KOYEB_TYO",
+	"koyeb-was":               "REGION_KOYEB_WAS",
+	"railway-us-west2":        "REGION_RAILWAY_US_WEST2",
+	"railway-us-east4":        "REGION_RAILWAY_US_EAST4",
+	"railway-europe-west4":    "REGION_RAILWAY_EUROPE_WEST4",
 	"railway-asia-southeast1": "REGION_RAILWAY_ASIA_SOUTHEAST1",
 }
 
@@ -223,5 +224,6 @@ func keys(m map[string]string) []string {
 	for k := range m {
 		out = append(out, k)
 	}
+	sort.Strings(out)
 	return out
 }

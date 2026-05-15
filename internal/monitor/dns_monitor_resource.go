@@ -7,6 +7,7 @@ import (
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
+	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -121,8 +122,12 @@ func (r *dnsMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Validators: []validator.String{stringvalidator.LengthAtMost(1024)},
 			},
 			"regions": schema.SetAttribute{
-				Optional:    true,
-				ElementType: types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "Regions to monitor from.",
+				Validators: []validator.Set{
+					setvalidator.ValueStringsAre(stringvalidator.OneOf(RegionValues...)),
+				},
 			},
 			"status": schema.StringAttribute{
 				Computed:      true,
