@@ -49,7 +49,7 @@ resource "openstatus_dns_monitor" "main" {
 - `open_telemetry` (Block, Optional) OpenTelemetry exporter configuration. (see [below for nested schema](#nestedblock--open_telemetry))
 - `public` (Boolean)
 - `record_assertions` (Block List) (see [below for nested schema](#nestedblock--record_assertions))
-- `regions` (Set of String)
+- `regions` (Set of String) Regions to monitor from.
 - `retry` (Number)
 - `timeout` (Number)
 
