@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.2.1
+
+### Changed
+
+- **`regions` is now validated at plan time** on `openstatus_http_monitor`, `openstatus_tcp_monitor`, and `openstatus_dns_monitor`. Configs that reference an unknown region (typo, copy-paste from another provider, a region the OpenStatus API doesn't yet expose) now fail at `terraform plan` instead of mid-apply. The accepted set is unchanged — see the resource docs for the full list. If you need a region that isn't listed, open an issue; the fix is a one-line addition to `regionToAPI` in the provider.
+- **`regions` attribute now has a consistent description** ("Regions to monitor from.") on the TCP and DNS monitor resources, matching the HTTP monitor and improving the generated docs.
+
+### Fixed
+
+- **Generated provider docs are now deterministic** for enum-shaped attributes (`periodicity`, `regions`, `method`, comparator fields). Previously the helper that derived the allowed-values list iterated a Go map directly, which produced nondeterministic ordering between regenerations.
+
 ## v0.2.0
 
 ### Breaking changes
