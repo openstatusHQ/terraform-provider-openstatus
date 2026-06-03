@@ -541,10 +541,14 @@ func extractWebhookEndpointBlock(ctx context.Context, list types.List, diags *di
 }
 
 func extractNtfyBlock(ctx context.Context, list types.List, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
+	// Optional fields must use types.String so null values (i.e. attribute
+	// omitted in HCL) round-trip without conversion errors. Plain `string`
+	// fails ElementsAs with "Received null value, however the target type
+	// cannot handle null values".
 	var items []struct {
-		Topic     string `tfsdk:"topic"`
-		ServerURL string `tfsdk:"server_url"`
-		Token     string `tfsdk:"token"`
+		Topic     string       `tfsdk:"topic"`
+		ServerURL types.String `tfsdk:"server_url"`
+		Token     types.String `tfsdk:"token"`
 	}
 	diags.Append(list.ElementsAs(ctx, &items, false)...)
 	if len(items) == 0 {
@@ -552,11 +556,11 @@ func extractNtfyBlock(ctx context.Context, list types.List, diags *diag.Diagnost
 		return nil, *diags
 	}
 	result := map[string]interface{}{"topic": items[0].Topic}
-	if items[0].ServerURL != "" {
-		result["serverUrl"] = items[0].ServerURL
+	if v := items[0].ServerURL.ValueString(); v != "" {
+		result["serverUrl"] = v
 	}
-	if items[0].Token != "" {
-		result["token"] = items[0].Token
+	if v := items[0].Token.ValueString(); v != "" {
+		result["token"] = v
 	}
 	return result, *diags
 }
@@ -616,6 +620,10 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 	grafanaOncallType := map[string]attr.Type{"webhook_url": types.StringType}
 	ntfyType := map[string]attr.Type{"topic": types.StringType, "server_url": types.StringType, "token": types.StringType}
 	msTeamsType := map[string]attr.Type{"webhook_url": types.StringType}
+
+	// Capture sensitive values that the API does not echo back before the
+	// per-provider lists are reset below. See ntfy.token note in the switch.
+	plannedNtfyToken := existingNtfyStringField(data.Ntfy, "token")
 
 	data.Discord = nullList(discordType)
 	data.Email = nullList(emailType)
@@ -709,10 +717,22 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
 		}, &diags)
 	case "ntfy":
+		// The API does not echo back ntfy.token (Sensitive). If the response
+		// omits it, fall back to plannedNtfyToken (captured above before the
+		// per-provider reset) — otherwise Terraform reports "inconsistent
+		// values for sensitive attribute". Preserve the planned shape
+		// (null vs value): if the user omitted token in HCL the planned
+		// value is null, so post-apply state must be null too.
+		var token types.String
+		if v := strFromData(apiData, "token"); v != "" {
+			token = types.StringValue(v)
+		} else {
+			token = plannedNtfyToken
+		}
 		data.Ntfy = buildSingleObjList(ctx, ntfyType, map[string]attr.Value{
 			"topic":      types.StringValue(strFromData(apiData, "topic")),
 			"server_url": types.StringValue(strFromData(apiData, "serverUrl")),
-			"token":      types.StringValue(strFromData(apiData, "token")),
+			"token":      token,
 		}, &diags)
 	case "ms_teams":
 		data.MSTeams = buildSingleObjList(ctx, msTeamsType, map[string]attr.Value{
@@ -729,6 +749,35 @@ func buildSingleObjList(_ context.Context, attrTypes map[string]attr.Type, vals 
 	list, d := types.ListValue(types.ObjectType{AttrTypes: attrTypes}, []attr.Value{obj})
 	diags.Append(d...)
 	return list
+}
+
+// existingNtfyStringField returns the planned/state value of the given
+// tfsdk string attribute on the single-element ntfy list. Returns
+// types.StringNull() if the list is null/empty/unknown or the attribute
+// isn't a string. Preserves the *shape* (null vs value vs empty string)
+// — critical for Sensitive attributes, where Terraform compares plan and
+// post-apply state byte-for-byte.
+func existingNtfyStringField(list types.List, attr string) types.String {
+	if list.IsNull() || list.IsUnknown() {
+		return types.StringNull()
+	}
+	elems := list.Elements()
+	if len(elems) == 0 {
+		return types.StringNull()
+	}
+	obj, ok := elems[0].(types.Object)
+	if !ok {
+		return types.StringNull()
+	}
+	v, ok := obj.Attributes()[attr]
+	if !ok {
+		return types.StringNull()
+	}
+	s, ok := v.(types.String)
+	if !ok {
+		return types.StringNull()
+	}
+	return s
 }
 
 func strFromData(data map[string]interface{}, key string) string {

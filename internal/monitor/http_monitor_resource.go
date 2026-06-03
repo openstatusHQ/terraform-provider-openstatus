@@ -565,20 +565,23 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 		data.Regions = types.SetNull(types.StringType)
 	}
 
-	if len(api.Headers) > 0 {
-		headerObjs := make([]attr.Value, 0, len(api.Headers))
-		for _, h := range api.Headers {
-			obj, d := types.ObjectValue(headerObjTypes, map[string]attr.Value{
-				"key":   types.StringValue(h.Key),
-				"value": types.StringValue(h.Value),
-			})
-			diags.Append(d...)
-			headerObjs = append(headerObjs, obj)
+	// API returns `headers: [{}]` as a placeholder when no headers are
+	// configured. Drop empty entries so block count matches the plan (#19).
+	headerObjs := make([]attr.Value, 0, len(api.Headers))
+	for _, h := range api.Headers {
+		if h.Key == "" && h.Value == "" {
+			continue
 		}
-		headerList, d := types.ListValue(types.ObjectType{AttrTypes: headerObjTypes}, headerObjs)
+		obj, d := types.ObjectValue(headerObjTypes, map[string]attr.Value{
+			"key":   types.StringValue(h.Key),
+			"value": types.StringValue(h.Value),
+		})
 		diags.Append(d...)
-		data.Headers = headerList
+		headerObjs = append(headerObjs, obj)
 	}
+	headerList, d := types.ListValue(types.ObjectType{AttrTypes: headerObjTypes}, headerObjs)
+	diags.Append(d...)
+	data.Headers = headerList
 
 	if len(api.StatusCodeAssertions) > 0 {
 		objs := make([]attr.Value, 0, len(api.StatusCodeAssertions))

@@ -1,8 +1,11 @@
 package monitor
 
 import (
+	"context"
 	"encoding/json"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 func TestHTTPMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
@@ -59,6 +62,122 @@ func TestHTTPMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
 		if _, ok := raw[field]; !ok {
 			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
 		}
+	}
+}
+
+func TestHTTPAPIToModel_DropsEmptyPlaceholderHeader(t *testing.T) {
+	api := httpMonitorAPIObject{
+		Headers: []apiHeader{{Key: "", Value: ""}},
+	}
+	var data httpMonitorModel
+	data.Headers = types.ListNull(types.ObjectType{AttrTypes: headerObjTypes})
+
+	diags := httpAPIToModel(context.Background(), api, &data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if data.Headers.IsNull() {
+		t.Fatal("Headers is null, want empty list")
+	}
+	if got := len(data.Headers.Elements()); got != 0 {
+		t.Errorf("Headers length = %d, want 0", got)
+	}
+}
+
+func TestHTTPAPIToModel_KeepsRealHeaders(t *testing.T) {
+	api := httpMonitorAPIObject{
+		Headers: []apiHeader{{Key: "X-Api-Key", Value: "secret"}},
+	}
+	var data httpMonitorModel
+
+	diags := httpAPIToModel(context.Background(), api, &data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if data.Headers.IsNull() {
+		t.Fatal("Headers is null, want one-element list")
+	}
+	elems := data.Headers.Elements()
+	if len(elems) != 1 {
+		t.Fatalf("Headers length = %d, want 1", len(elems))
+	}
+	obj, ok := elems[0].(types.Object)
+	if !ok {
+		t.Fatalf("element is %T, want types.Object", elems[0])
+	}
+	attrs := obj.Attributes()
+	key, ok := attrs["key"].(types.String)
+	if !ok {
+		t.Fatalf("key is %T, want types.String", attrs["key"])
+	}
+	if got := key.ValueString(); got != "X-Api-Key" {
+		t.Errorf("key = %q, want %q", got, "X-Api-Key")
+	}
+	value, ok := attrs["value"].(types.String)
+	if !ok {
+		t.Fatalf("value is %T, want types.String", attrs["value"])
+	}
+	if got := value.ValueString(); got != "secret" {
+		t.Errorf("value = %q, want %q", got, "secret")
+	}
+}
+
+func TestHTTPAPIToModel_KeepsRealHeadersAlongsidePlaceholder(t *testing.T) {
+	api := httpMonitorAPIObject{
+		Headers: []apiHeader{
+			{Key: "", Value: ""},
+			{Key: "X", Value: "Y"},
+			{Key: "", Value: ""},
+		},
+	}
+	var data httpMonitorModel
+
+	diags := httpAPIToModel(context.Background(), api, &data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	elems := data.Headers.Elements()
+	if len(elems) != 1 {
+		t.Fatalf("Headers length = %d, want 1 (placeholders dropped)", len(elems))
+	}
+	obj, ok := elems[0].(types.Object)
+	if !ok {
+		t.Fatalf("element is %T, want types.Object", elems[0])
+	}
+	attrs := obj.Attributes()
+	key, ok := attrs["key"].(types.String)
+	if !ok {
+		t.Fatalf("key is %T, want types.String", attrs["key"])
+	}
+	if got := key.ValueString(); got != "X" {
+		t.Errorf("key = %q, want %q", got, "X")
+	}
+	value, ok := attrs["value"].(types.String)
+	if !ok {
+		t.Fatalf("value is %T, want types.String", attrs["value"])
+	}
+	if got := value.ValueString(); got != "Y" {
+		t.Errorf("value = %q, want %q", got, "Y")
+	}
+}
+
+func TestHTTPAPIToModel_HeaderListShapeMatchesGetForAbsentBlock(t *testing.T) {
+	// Sanity: when the API returns nothing and state had no headers, the
+	// mapper should produce an empty (non-null) list — matching the shape
+	// Get() produces for an absent ListNestedBlock. Guards #19 from
+	// regressing if someone "optimizes" the filter back to a null branch.
+	api := httpMonitorAPIObject{Headers: nil}
+	var data httpMonitorModel
+
+	diags := httpAPIToModel(context.Background(), api, &data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if data.Headers.IsNull() {
+		t.Fatal("Headers is null, want empty list to match plan shape")
+	}
+	if got := len(data.Headers.Elements()); got != 0 {
+		t.Errorf("Headers length = %d, want 0", got)
 	}
 }
 
