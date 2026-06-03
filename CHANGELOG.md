@@ -1,5 +1,13 @@
 # Changelog
 
+## v0.2.2
+
+### Fixed
+
+- **`openstatus_http_monitor` apply no longer fails with `"block count changed from 0 to 1"`** ([#19](https://github.com/openstatusHQ/terraform-provider-openstatus/issues/19)). The OpenStatus API echoes a placeholder empty header (`headers: [{}]`) when no headers are configured; the provider now drops empty entries before writing state, restoring plan↔apply consistency. Real headers (any non-empty key or value) are unaffected, and drift detection still works when a header is added or removed out-of-band via the dashboard.
+- **`openstatus_notification` ntfy block no longer fails with `"Received null value, however the target type cannot handle null values"`** when `server_url` or `token` is omitted. Both are documented as `Optional` in the schema; the extract path was decoding them into plain `string`, which the framework rejects for null inputs. They now decode through `types.String` and are only sent to the API when non-empty.
+- **`openstatus_notification` ntfy update no longer fails with `"inconsistent values for sensitive attribute"`** on `.ntfy[0].token`. The OpenStatus API does not echo back ntfy.token in its response (security default for sensitive fields); the read-back mapper now preserves the planned/state token when the API omits it, so the post-apply state matches what Terraform planned. If the API ever does return a token, that value still takes priority.
+
 ## v0.2.1
 
 ### Changed
