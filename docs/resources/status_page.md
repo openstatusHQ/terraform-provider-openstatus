@@ -23,6 +23,18 @@ resource "openstatus_status_page" "main" {
   default_locale = "en"
   locales        = ["en", "fr"]
   allow_index    = true
+
+  # Per-mode CSS variable overrides (requires the custom-theme plan feature).
+  custom_theme = {
+    light = {
+      "--primary" = "hsl(24 94% 50%)"
+      "--radius"  = "0.5rem"
+    }
+    dark = {
+      "--primary"    = "hsl(24 94% 60%)"
+      "--background" = "hsl(240 10% 4%)"
+    }
+  }
 }
 
 resource "openstatus_status_page" "internal" {
@@ -49,6 +61,7 @@ resource "openstatus_status_page" "internal" {
 - `auth_email_domains` (List of String) List of email domains allowed to access the page. Used when `access_type` is `email-domain`.
 - `contact_url` (String)
 - `custom_domain` (String) Custom domain for the status page. DNS must point to OpenStatus before setting this.
+- `custom_theme` (Attributes) Per-mode CSS variable overrides merged over `theme` (e.g. `--primary = "hsl(24 94% 50%)"`). Only variable names supported by OpenStatus are accepted. Requires the custom-theme plan feature. (see [below for nested schema](#nestedatt--custom_theme))
 - `default_locale` (String)
 - `description` (String)
 - `homepage_url` (String)
@@ -63,3 +76,11 @@ resource "openstatus_status_page" "internal" {
 - `id` (String) The ID of this resource.
 - `published` (Boolean)
 - `updated_at` (String)
+
+<a id="nestedatt--custom_theme"></a>
+### Nested Schema for `custom_theme`
+
+Optional:
+
+- `dark` (Map of String) CSS variable overrides applied in dark mode, keyed by variable name.
+- `light` (Map of String) CSS variable overrides applied in light mode, keyed by variable name.

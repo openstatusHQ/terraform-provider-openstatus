@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.2.3
+
+### Added
+
+- **`custom_theme` on `openstatus_status_page`** (resource and data source). Per-mode CSS variable overrides merged over `theme`, with `light` and `dark` maps keyed by variable name (e.g. `--primary = "hsl(24 94% 50%)"`). Variable names and values are validated at plan time against the same rules the API enforces, so invalid themes fail at `terraform plan` instead of mid-apply. Removing the block clears the theme on the next apply. Requires the custom-theme plan feature on the workspace.
+
 ## v0.2.2
 
 ### Fixed

@@ -39,6 +39,7 @@ type statusPageDataSourceModel struct {
 	AuthEmailDomains types.List   `tfsdk:"auth_email_domains"`
 	AllowedIPRanges  types.String `tfsdk:"allowed_ip_ranges"`
 	Theme            types.String `tfsdk:"theme"`
+	CustomTheme      types.Object `tfsdk:"custom_theme"`
 	DefaultLocale    types.String `tfsdk:"default_locale"`
 	Locales          types.List   `tfsdk:"locales"`
 	AllowIndex       types.Bool   `tfsdk:"allow_index"`
@@ -75,11 +76,19 @@ func (d *statusPageDataSource) Schema(_ context.Context, _ datasource.SchemaRequ
 			"auth_email_domains": schema.ListAttribute{Computed: true, ElementType: types.StringType},
 			"allowed_ip_ranges":  schema.StringAttribute{Computed: true},
 			"theme":              schema.StringAttribute{Computed: true},
-			"default_locale":     schema.StringAttribute{Computed: true},
-			"locales":            schema.ListAttribute{Computed: true, ElementType: types.StringType},
-			"allow_index":        schema.BoolAttribute{Computed: true},
-			"created_at":         schema.StringAttribute{Computed: true},
-			"updated_at":         schema.StringAttribute{Computed: true},
+			"custom_theme": schema.SingleNestedAttribute{
+				Computed:            true,
+				MarkdownDescription: "Per-mode CSS variable overrides merged over `theme`. Null when not configured.",
+				Attributes: map[string]schema.Attribute{
+					"light": schema.MapAttribute{Computed: true, ElementType: types.StringType},
+					"dark":  schema.MapAttribute{Computed: true, ElementType: types.StringType},
+				},
+			},
+			"default_locale": schema.StringAttribute{Computed: true},
+			"locales":        schema.ListAttribute{Computed: true, ElementType: types.StringType},
+			"allow_index":    schema.BoolAttribute{Computed: true},
+			"created_at":     schema.StringAttribute{Computed: true},
+			"updated_at":     schema.StringAttribute{Computed: true},
 		},
 	}
 }
@@ -129,6 +138,7 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
 		)
 	}
+	data.CustomTheme = customThemeFromAPI(ctx, api.CustomTheme, &resp.Diagnostics)
 	if v, ok := localeFromProto(api.DefaultLocale); ok {
 		data.DefaultLocale = types.StringValue(v)
 	} else if api.DefaultLocale != "" {
