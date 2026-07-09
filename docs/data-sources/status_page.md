@@ -34,6 +34,7 @@ output "status_page_slug" {
 - `contact_url` (String)
 - `created_at` (String)
 - `custom_domain` (String)
+- `custom_theme` (Attributes) Per-mode CSS variable overrides merged over `theme`. Null when not configured. (see [below for nested schema](#nestedatt--custom_theme))
 - `default_locale` (String)
 - `description` (String)
 - `homepage_url` (String)
@@ -46,3 +47,11 @@ output "status_page_slug" {
 - `theme` (String)
 - `title` (String)
 - `updated_at` (String)
+
+<a id="nestedatt--custom_theme"></a>
+### Nested Schema for `custom_theme`
+
+Read-Only:
+
+- `dark` (Map of String)
+- `light` (Map of String)

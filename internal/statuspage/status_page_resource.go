@@ -18,6 +18,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
+	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
 
 var (
@@ -52,6 +53,7 @@ type statusPageModel struct {
 	AllowedIPRanges  types.String `tfsdk:"allowed_ip_ranges"`
 	Published        types.Bool   `tfsdk:"published"`
 	Theme            types.String `tfsdk:"theme"`
+	CustomTheme      types.Object `tfsdk:"custom_theme"`
 	DefaultLocale    types.String `tfsdk:"default_locale"`
 	Locales          types.List   `tfsdk:"locales"`
 	AllowIndex       types.Bool   `tfsdk:"allow_index"`
@@ -142,6 +144,25 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Default:    stringdefault.StaticString("system"),
 				Validators: []validator.String{stringvalidator.OneOf("system", "light", "dark")},
 			},
+			"custom_theme": schema.SingleNestedAttribute{
+				Optional: true,
+				MarkdownDescription: "Per-mode CSS variable overrides merged over `theme` (e.g. `\"--primary\" = \"hsl(24 94% 50%)\"`). " +
+					"Only variable names supported by OpenStatus are accepted. Requires the custom-theme plan feature.",
+				Attributes: map[string]schema.Attribute{
+					"light": schema.MapAttribute{
+						Optional:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "CSS variable overrides applied in light mode, keyed by variable name.",
+						Validators:          []validator.Map{themeVarsValidator{}},
+					},
+					"dark": schema.MapAttribute{
+						Optional:            true,
+						ElementType:         types.StringType,
+						MarkdownDescription: "CSS variable overrides applied in dark mode, keyed by variable name.",
+						Validators:          []validator.Map{themeVarsValidator{}},
+					},
+				},
+			},
 			"default_locale": schema.StringAttribute{
 				Optional:   true,
 				Computed:   true,
@@ -219,6 +240,22 @@ func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.Va
 			"allowed_ip_ranges can only be set when access_type is \"ip\".",
 		)
 	}
+
+	if !data.CustomTheme.IsNull() && !data.CustomTheme.IsUnknown() {
+		var theme customThemeModel
+		resp.Diagnostics.Append(data.CustomTheme.As(ctx, &theme, basetypes.ObjectAsOptions{})...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		// The API stores an all-empty theme as "not configured", so state would never match.
+		if theme.Light.IsNull() && theme.Dark.IsNull() {
+			resp.Diagnostics.AddAttributeError(
+				path.Root("custom_theme"),
+				"Invalid custom theme",
+				"custom_theme must set at least one of \"light\" or \"dark\"; remove the block instead of leaving it empty.",
+			)
+		}
+	}
 }
 
 type apiStatusPageCreateRequest struct {
@@ -237,6 +274,8 @@ type apiStatusPageCreateRequest struct {
 	DefaultLocale    string   `json:"defaultLocale,omitempty"`
 	Locales          []string `json:"locales,omitempty"`
 	AllowIndex       *bool    `json:"allowIndex,omitempty"`
+
+	CustomTheme *apiCustomTheme `json:"customTheme,omitempty"`
 }
 
 type apiStatusPageUpdateRequest struct {
@@ -256,6 +295,9 @@ type apiStatusPageUpdateRequest struct {
 	DefaultLocale    *string   `json:"defaultLocale,omitempty"`
 	Locales          *[]string `json:"locales,omitempty"`
 	AllowIndex       *bool     `json:"allowIndex,omitempty"`
+
+	// Omitted = keep current value; empty message = clear.
+	CustomTheme *apiCustomTheme `json:"customTheme,omitempty"`
 }
 
 type apiStatusPageResponse struct {
@@ -282,6 +324,8 @@ type apiStatusPage struct {
 	AllowIndex       bool     `json:"allowIndex"`
 	CreatedAt        string   `json:"createdAt"`
 	UpdatedAt        string   `json:"updatedAt"`
+
+	CustomTheme *apiCustomTheme `json:"customTheme"`
 }
 
 func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
@@ -331,6 +375,11 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
 		v := data.AllowIndex.ValueBool()
 		apiReq.AllowIndex = &v
+	}
+
+	apiReq.CustomTheme = customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics)
+	if resp.Diagnostics.HasError() {
+		return
 	}
 
 	var apiResp apiStatusPageResponse
@@ -450,6 +499,24 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
 		v := data.AllowIndex.ValueBool()
 		updateReq.AllowIndex = &v
+	}
+
+	if !data.CustomTheme.IsNull() && !data.CustomTheme.IsUnknown() {
+		updateReq.CustomTheme = customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+	} else if data.CustomTheme.IsNull() {
+		// Clear only when state had one: the field's presence triggers the
+		// server's plan-feature check, breaking unrelated updates otherwise.
+		var state statusPageModel
+		resp.Diagnostics.Append(req.State.Get(ctx, &state)...)
+		if resp.Diagnostics.HasError() {
+			return
+		}
+		if !state.CustomTheme.IsNull() {
+			updateReq.CustomTheme = &apiCustomTheme{}
+		}
 	}
 
 	var apiResp apiStatusPageResponse
@@ -602,6 +669,7 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
 		)
 	}
+	data.CustomTheme = customThemeFromAPI(ctx, api.CustomTheme, diags)
 	if v, ok := localeFromProto(api.DefaultLocale); ok {
 		data.DefaultLocale = types.StringValue(v)
 	} else if api.DefaultLocale != "" {

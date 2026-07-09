@@ -8,6 +8,18 @@ resource "openstatus_status_page" "main" {
   default_locale = "en"
   locales        = ["en", "fr"]
   allow_index    = true
+
+  # Per-mode CSS variable overrides (requires the custom-theme plan feature).
+  custom_theme = {
+    light = {
+      "--primary" = "hsl(24 94% 50%)"
+      "--radius"  = "0.5rem"
+    }
+    dark = {
+      "--primary"    = "hsl(24 94% 60%)"
+      "--background" = "hsl(240 10% 4%)"
+    }
+  }
 }
 
 resource "openstatus_status_page" "internal" {
