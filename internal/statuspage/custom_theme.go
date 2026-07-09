@@ -145,7 +145,12 @@ func (v themeVarsValidator) ValidateMap(ctx context.Context, req validator.MapRe
 
 	for name, elem := range elements {
 		strVal, ok := elem.(types.String)
-		if !ok || strVal.IsNull() || strVal.IsUnknown() {
+		if !ok || strVal.IsUnknown() {
+			continue
+		}
+		if strVal.IsNull() {
+			resp.Diagnostics.AddAttributeError(req.Path.AtMapKey(name), "Invalid custom theme variable",
+				fmt.Sprintf("value of %q must not be null.", name))
 			continue
 		}
 		for _, msg := range validateThemeVarEntry(name, strVal.ValueString()) {
@@ -179,6 +184,10 @@ func customThemeToAPI(ctx context.Context, obj types.Object, diags *diag.Diagnos
 		diags.Append(model.Dark.ElementsAs(ctx, &api.Dark, false)...)
 	}
 	if diags.HasError() {
+		return nil
+	}
+	// An empty message means "clear" on update; never emit one for a set config value.
+	if len(api.Light) == 0 && len(api.Dark) == 0 {
 		return nil
 	}
 	return api

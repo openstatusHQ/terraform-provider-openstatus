@@ -102,6 +102,29 @@ func TestThemeVarsValidator_EmptyMapRejected(t *testing.T) {
 	}
 }
 
+func TestThemeVarsValidator_NullValueRejected(t *testing.T) {
+	m, diags := types.MapValue(types.StringType, map[string]attr.Value{
+		"--primary": types.StringNull(),
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diagnostics: %v", diags)
+	}
+	if diags := runThemeVarsValidator(t, m); !diags.HasError() {
+		t.Error("null element value should be rejected")
+	}
+}
+
+func TestCustomThemeToAPI_AllModesNullIsNil(t *testing.T) {
+	obj := customThemeObject(t, nil, nil)
+	var diags diag.Diagnostics
+	if got := customThemeToAPI(context.Background(), obj, &diags); got != nil {
+		t.Errorf("both modes null = %v, want nil", got)
+	}
+	if diags.HasError() {
+		t.Errorf("unexpected diagnostics: %v", diags)
+	}
+}
+
 func TestThemeVarsValidator_UnknownVarRejected(t *testing.T) {
 	m, _ := types.MapValueFrom(context.Background(), types.StringType, map[string]string{
 		"--not-a-var": "red",

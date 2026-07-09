@@ -146,7 +146,7 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			},
 			"custom_theme": schema.SingleNestedAttribute{
 				Optional: true,
-				MarkdownDescription: "Per-mode CSS variable overrides merged over `theme` (e.g. `--primary = \"hsl(24 94% 50%)\"`). " +
+				MarkdownDescription: "Per-mode CSS variable overrides merged over `theme` (e.g. `\"--primary\" = \"hsl(24 94% 50%)\"`). " +
 					"Only variable names supported by OpenStatus are accepted. Requires the custom-theme plan feature.",
 				Attributes: map[string]schema.Attribute{
 					"light": schema.MapAttribute{
@@ -506,7 +506,7 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-	} else {
+	} else if data.CustomTheme.IsNull() {
 		// Clear only when state had one: the field's presence triggers the
 		// server's plan-feature check, breaking unrelated updates otherwise.
 		var state statusPageModel
