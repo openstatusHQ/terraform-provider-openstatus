@@ -5,6 +5,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -76,51 +80,56 @@ func (d *monitorDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
-	var apiResp getMonitorResponse
-	err := d.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/GetMonitor",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &monitorv1.GetMonitorRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := d.client.Monitor.GetMonitor(ctx, connect.NewRequest(getReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading monitor", err.Error())
 		return
 	}
 
+	config := apiResp.Msg.GetMonitor()
 	switch {
-	case apiResp.Monitor.HTTP != nil:
+	case config.GetHttp() != nil:
+		m := config.GetHttp()
 		data.Type = types.StringValue("http")
-		data.Name = types.StringValue(apiResp.Monitor.HTTP.Name)
-		data.URL = types.StringValue(apiResp.Monitor.HTTP.URL)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.HTTP.Periodicity))
-		data.Method = types.StringValue(MapMethodFromAPI(apiResp.Monitor.HTTP.Method))
-		data.Active = types.BoolValue(apiResp.Monitor.HTTP.Active)
-		data.Public = types.BoolValue(apiResp.Monitor.HTTP.Public)
-		data.Description = types.StringValue(apiResp.Monitor.HTTP.Description)
-		data.Timeout = types.Int64Value(apiResp.Monitor.HTTP.Timeout.Int64())
-		if apiResp.Monitor.HTTP.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.HTTP.Status))
+		data.Name = types.StringValue(m.GetName())
+		data.URL = types.StringValue(m.GetUrl())
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(m.GetPeriodicity()))
+		data.Method = types.StringValue(MapMethodFromAPI(m.GetMethod()))
+		data.Active = types.BoolValue(m.GetActive())
+		data.Public = types.BoolValue(m.GetPublic())
+		data.Description = types.StringValue(m.GetDescription())
+		data.Timeout = types.Int64Value(m.GetTimeout())
+		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
 		}
-	case apiResp.Monitor.TCP != nil:
+	case config.GetTcp() != nil:
+		m := config.GetTcp()
 		data.Type = types.StringValue("tcp")
-		data.Name = types.StringValue(apiResp.Monitor.TCP.Name)
-		data.URI = types.StringValue(apiResp.Monitor.TCP.URI)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.TCP.Periodicity))
-		data.Active = types.BoolValue(apiResp.Monitor.TCP.Active)
-		data.Public = types.BoolValue(apiResp.Monitor.TCP.Public)
-		data.Description = types.StringValue(apiResp.Monitor.TCP.Description)
-		data.Timeout = types.Int64Value(apiResp.Monitor.TCP.Timeout.Int64())
-		if apiResp.Monitor.TCP.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.TCP.Status))
+		data.Name = types.StringValue(m.GetName())
+		data.URI = types.StringValue(m.GetUri())
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(m.GetPeriodicity()))
+		data.Active = types.BoolValue(m.GetActive())
+		data.Public = types.BoolValue(m.GetPublic())
+		data.Description = types.StringValue(m.GetDescription())
+		data.Timeout = types.Int64Value(m.GetTimeout())
+		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
 		}
-	case apiResp.Monitor.DNS != nil:
+	case config.GetDns() != nil:
+		m := config.GetDns()
 		data.Type = types.StringValue("dns")
-		data.Name = types.StringValue(apiResp.Monitor.DNS.Name)
-		data.URI = types.StringValue(apiResp.Monitor.DNS.URI)
-		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(apiResp.Monitor.DNS.Periodicity))
-		data.Active = types.BoolValue(apiResp.Monitor.DNS.Active)
-		data.Public = types.BoolValue(apiResp.Monitor.DNS.Public)
-		data.Description = types.StringValue(apiResp.Monitor.DNS.Description)
-		data.Timeout = types.Int64Value(apiResp.Monitor.DNS.Timeout.Int64())
-		if apiResp.Monitor.DNS.Status != "" {
-			data.Status = types.StringValue(MapMonitorStatusFromAPI(apiResp.Monitor.DNS.Status))
+		data.Name = types.StringValue(m.GetName())
+		data.URI = types.StringValue(m.GetUri())
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(m.GetPeriodicity()))
+		data.Active = types.BoolValue(m.GetActive())
+		data.Public = types.BoolValue(m.GetPublic())
+		data.Description = types.StringValue(m.GetDescription())
+		data.Timeout = types.Int64Value(m.GetTimeout())
+		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
 		}
 	default:
 		resp.Diagnostics.AddError("Monitor not found", "No monitor returned for ID: "+data.ID.ValueString())

@@ -1,77 +1,78 @@
 package monitor
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestTCPMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
-	obj := tcpMonitorAPIObject{
-		Name:        "test",
-		URI:         "example.com:443",
-		Periodicity: "PERIODICITY_1M",
-		Active:      false,
-		Public:      false,
+func TestTCPModelToAPI_DegradedAtPresence(t *testing.T) {
+	data := tcpMonitorModel{
+		Name:        types.StringValue("m"),
+		URI:         types.StringValue("db.example.com:5432"),
+		Periodicity: types.StringValue("1m"),
+		DegradedAt:  types.Int64Value(0),
 	}
 
-	data, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
+	got, diags := tcpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if got.HasDegradedAt() {
+		t.Error("degraded_at must stay absent when zero")
 	}
 
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+	data.DegradedAt = types.Int64Value(15000)
+	got, diags = tcpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-
-	for _, field := range []string{"active", "public"} {
-		val, ok := raw[field]
-		if !ok {
-			t.Errorf("field %q omitted from JSON when false — omitempty must be removed", field)
-			continue
-		}
-		if val != false {
-			t.Errorf("field %q = %v, want false", field, val)
-		}
+	if !got.HasDegradedAt() || got.GetDegradedAt() != 15000 {
+		t.Errorf("degraded_at = %d (present=%v), want 15000 present", got.GetDegradedAt(), got.HasDegradedAt())
 	}
 }
 
-func TestTCPMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
-	obj := tcpMonitorAPIObject{
-		Name:        "m",
-		URI:         "example.com:443",
-		Periodicity: "PERIODICITY_1M",
-		Description: "",
-		Timeout:     0,
-		Retry:       0,
+func TestTCPModelToAPI_SendsZeroScalars(t *testing.T) {
+	got, diags := tcpModelToAPI(context.Background(), tcpMonitorModel{
+		Name:        types.StringValue("m"),
+		URI:         types.StringValue("db.example.com:5432"),
+		Periodicity: types.StringValue("1m"),
+		Timeout:     types.Int64Value(0),
+		Retry:       types.Int64Value(0),
+		Active:      types.BoolValue(false),
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	for _, field := range []string{"description", "timeout", "retry"} {
-		if _, ok := raw[field]; !ok {
-			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
-		}
+	if got.GetTimeout() != 0 || got.GetRetry() != 0 || got.GetActive() {
+		t.Error("zero-valued scalars should round-trip as zero")
 	}
 }
 
-func TestGetMonitorResponse_NestedMonitorWrapper_TCP(t *testing.T) {
-	apiJSON := `{"monitor":{"tcp":{"name":"Orbula","uri":"v3.license.containous.cloud:443"}}}`
-
-	var resp getMonitorResponse
-	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+func TestTCPAPIToModel_RoundTrip(t *testing.T) {
+	api, diags := tcpModelToAPI(context.Background(), tcpMonitorModel{
+		Name:        types.StringValue("Database"),
+		URI:         types.StringValue("db.example.com:5432"),
+		Periodicity: types.StringValue("5m"),
+		Timeout:     types.Int64Value(10000),
+		Active:      types.BoolValue(true),
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
 
-	if resp.Monitor.TCP == nil {
-		t.Fatal("expected monitor.tcp to be parsed, got nil")
+	var data tcpMonitorModel
+	if diags := tcpAPIToModel(context.Background(), api, &data); diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	if resp.Monitor.TCP.Name != "Orbula" {
-		t.Errorf("name = %q, want %q", resp.Monitor.TCP.Name, "Orbula")
+	if data.URI.ValueString() != "db.example.com:5432" {
+		t.Errorf("URI = %q, want db.example.com:5432", data.URI.ValueString())
+	}
+	if data.Periodicity.ValueString() != "5m" {
+		t.Errorf("Periodicity = %q, want 5m", data.Periodicity.ValueString())
+	}
+	if data.Timeout.ValueInt64() != 10000 {
+		t.Errorf("Timeout = %d, want 10000", data.Timeout.ValueInt64())
 	}
 }

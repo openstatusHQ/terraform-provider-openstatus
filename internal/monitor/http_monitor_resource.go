@@ -5,6 +5,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -247,68 +251,6 @@ func (r *httpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest
 	}
 }
 
-type httpMonitorAPIRequest struct {
-	Monitor httpMonitorAPIObject `json:"monitor"`
-}
-
-type httpMonitorAPIUpdateRequest struct {
-	ID      string               `json:"id"`
-	Monitor httpMonitorAPIObject `json:"monitor"`
-}
-
-type httpMonitorAPIObject struct {
-	ID                   string                   `json:"id,omitempty"`
-	Name                 string                   `json:"name"`
-	URL                  string                   `json:"url"`
-	Periodicity          string                   `json:"periodicity"`
-	Method               string                   `json:"method,omitempty"`
-	Body                 string                   `json:"body"`
-	Timeout              jsonInt64                `json:"timeout"`
-	DegradedAt           jsonInt64                `json:"degradedAt,omitempty"`
-	Retry                jsonInt64                `json:"retry"`
-	FollowRedirects      bool                     `json:"followRedirects"`
-	Active               bool                     `json:"active"`
-	Public               bool                     `json:"public"`
-	Description          string                   `json:"description"`
-	Regions              []string                 `json:"regions,omitempty"`
-	Headers              []apiHeader              `json:"headers,omitempty"`
-	StatusCodeAssertions []apiStatusCodeAssertion `json:"statusCodeAssertions,omitempty"`
-	BodyAssertions       []apiBodyAssertion       `json:"bodyAssertions,omitempty"`
-	HeaderAssertions     []apiHeaderAssertion     `json:"headerAssertions,omitempty"`
-	OpenTelemetry        *apiOpenTelemetry        `json:"openTelemetry"`
-	Status               string                   `json:"status,omitempty"`
-}
-
-type apiStatusCodeAssertion struct {
-	Target     jsonInt64 `json:"target"`
-	Comparator string    `json:"comparator"`
-}
-
-type apiBodyAssertion struct {
-	Target     string `json:"target"`
-	Comparator string `json:"comparator"`
-}
-
-type apiHeaderAssertion struct {
-	Target     string `json:"target"`
-	Comparator string `json:"comparator"`
-	Key        string `json:"key"`
-}
-
-type httpMonitorAPIResponse struct {
-	Monitor httpMonitorAPIObject `json:"monitor"`
-}
-
-type getMonitorResponseInner struct {
-	HTTP *httpMonitorAPIObject `json:"http,omitempty"`
-	TCP  *tcpMonitorAPIObject  `json:"tcp,omitempty"`
-	DNS  *dnsMonitorAPIObject  `json:"dns,omitempty"`
-}
-
-type getMonitorResponse struct {
-	Monitor getMonitorResponseInner `json:"monitor"`
-}
-
 func (r *httpMonitorResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data httpMonitorModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -322,14 +264,16 @@ func (r *httpMonitorResource) Create(ctx context.Context, req resource.CreateReq
 		return
 	}
 
-	var apiResp httpMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/CreateHTTPMonitor", httpMonitorAPIRequest{Monitor: apiObj}, &apiResp)
+	apiReq := &monitorv1.CreateHTTPMonitorRequest{}
+	apiReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.CreateHTTPMonitor(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating HTTP monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(httpAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(httpAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -340,10 +284,12 @@ func (r *httpMonitorResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	var apiResp getMonitorResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/GetMonitor", map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &monitorv1.GetMonitorRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := r.client.Monitor.GetMonitor(ctx, connect.NewRequest(getReq))
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -351,12 +297,13 @@ func (r *httpMonitorResource) Read(ctx context.Context, req resource.ReadRequest
 		return
 	}
 
-	if apiResp.Monitor.HTTP == nil {
+	monitor := apiResp.Msg.GetMonitor().GetHttp()
+	if monitor == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(httpAPIToModel(ctx, *apiResp.Monitor.HTTP, &data)...)
+	resp.Diagnostics.Append(httpAPIToModel(ctx, monitor, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -379,15 +326,17 @@ func (r *httpMonitorResource) Update(ctx context.Context, req resource.UpdateReq
 		return
 	}
 
-	var apiResp httpMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/UpdateHTTPMonitor",
-		httpMonitorAPIUpdateRequest{ID: state.ID.ValueString(), Monitor: apiObj}, &apiResp)
+	updateReq := &monitorv1.UpdateHTTPMonitorRequest{}
+	updateReq.SetId(state.ID.ValueString())
+	updateReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.UpdateHTTPMonitor(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating HTTP monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(httpAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(httpAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -398,9 +347,11 @@ func (r *httpMonitorResource) Delete(ctx context.Context, req resource.DeleteReq
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/DeleteMonitor",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &monitorv1.DeleteMonitorRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.Monitor.DeleteMonitor(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting HTTP monitor", err.Error())
 	}
 }
@@ -409,36 +360,36 @@ func (r *httpMonitorResource) ImportState(ctx context.Context, req resource.Impo
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, idPath, types.StringValue(req.ID))...)
 }
 
-func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIObject, diag.Diagnostics) {
+func httpModelToAPI(ctx context.Context, data httpMonitorModel) (*monitorv1.HTTPMonitor, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	periodicity, err := MapPeriodicityToAPI(data.Periodicity.ValueString())
 	if err != nil {
 		diags.AddError("Invalid periodicity", err.Error())
-		return httpMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
 	method, err := MapMethodToAPI(data.Method.ValueString())
 	if err != nil {
 		diags.AddError("Invalid method", err.Error())
-		return httpMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	var regions []string
+	var regions []monitorv1.Region
 	if !data.Regions.IsNull() && !data.Regions.IsUnknown() {
 		var tfRegions []string
 		diags.Append(data.Regions.ElementsAs(ctx, &tfRegions, false)...)
 		if diags.HasError() {
-			return httpMonitorAPIObject{}, diags
+			return nil, diags
 		}
 		regions, err = MapRegionsToAPI(tfRegions)
 		if err != nil {
 			diags.AddError("Invalid region", err.Error())
-			return httpMonitorAPIObject{}, diags
+			return nil, diags
 		}
 	}
 
-	var headers []apiHeader
+	var headers []*monitorv1.Headers
 	if !data.Headers.IsNull() && !data.Headers.IsUnknown() {
 		var tfHeaders []struct {
 			Key   string `tfsdk:"key"`
@@ -446,11 +397,14 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 		}
 		diags.Append(data.Headers.ElementsAs(ctx, &tfHeaders, false)...)
 		for _, h := range tfHeaders {
-			headers = append(headers, apiHeader{Key: h.Key, Value: h.Value})
+			header := &monitorv1.Headers{}
+			header.SetKey(h.Key)
+			header.SetValue(h.Value)
+			headers = append(headers, header)
 		}
 	}
 
-	var statusCodeAssertions []apiStatusCodeAssertion
+	var statusCodeAssertions []*monitorv1.StatusCodeAssertion
 	if !data.StatusCodeAssertions.IsNull() && !data.StatusCodeAssertions.IsUnknown() {
 		var tfAssertions []struct {
 			Target     int64  `tfsdk:"target"`
@@ -461,15 +415,16 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 			comp, mapErr := MapNumberComparatorToAPI(a.Comparator)
 			if mapErr != nil {
 				diags.AddError("Invalid comparator", mapErr.Error())
-				return httpMonitorAPIObject{}, diags
+				return nil, diags
 			}
-			statusCodeAssertions = append(statusCodeAssertions, apiStatusCodeAssertion{
-				Target: jsonInt64(a.Target), Comparator: comp,
-			})
+			assertion := &monitorv1.StatusCodeAssertion{}
+			assertion.SetTarget(a.Target)
+			assertion.SetComparator(comp)
+			statusCodeAssertions = append(statusCodeAssertions, assertion)
 		}
 	}
 
-	var bodyAssertions []apiBodyAssertion
+	var bodyAssertions []*monitorv1.BodyAssertion
 	if !data.BodyAssertions.IsNull() && !data.BodyAssertions.IsUnknown() {
 		var tfAssertions []struct {
 			Target     string `tfsdk:"target"`
@@ -480,15 +435,16 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 			comp, mapErr := MapStringComparatorToAPI(a.Comparator)
 			if mapErr != nil {
 				diags.AddError("Invalid comparator", mapErr.Error())
-				return httpMonitorAPIObject{}, diags
+				return nil, diags
 			}
-			bodyAssertions = append(bodyAssertions, apiBodyAssertion{
-				Target: a.Target, Comparator: comp,
-			})
+			assertion := &monitorv1.BodyAssertion{}
+			assertion.SetTarget(a.Target)
+			assertion.SetComparator(comp)
+			bodyAssertions = append(bodyAssertions, assertion)
 		}
 	}
 
-	var headerAssertions []apiHeaderAssertion
+	var headerAssertions []*monitorv1.HeaderAssertion
 	if !data.HeaderAssertions.IsNull() && !data.HeaderAssertions.IsUnknown() {
 		var tfAssertions []struct {
 			Target     string `tfsdk:"target"`
@@ -500,64 +456,71 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (httpMonitorAPIO
 			comp, mapErr := MapStringComparatorToAPI(a.Comparator)
 			if mapErr != nil {
 				diags.AddError("Invalid comparator", mapErr.Error())
-				return httpMonitorAPIObject{}, diags
+				return nil, diags
 			}
-			headerAssertions = append(headerAssertions, apiHeaderAssertion{
-				Target: a.Target, Comparator: comp, Key: a.Key,
-			})
+			assertion := &monitorv1.HeaderAssertion{}
+			assertion.SetTarget(a.Target)
+			assertion.SetComparator(comp)
+			assertion.SetKey(a.Key)
+			headerAssertions = append(headerAssertions, assertion)
 		}
 	}
 
 	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
 	diags.Append(otelDiags...)
 	if diags.HasError() {
-		return httpMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	return httpMonitorAPIObject{
-		Name:                 data.Name.ValueString(),
-		URL:                  data.URL.ValueString(),
-		Periodicity:          periodicity,
-		Method:               method,
-		Body:                 data.Body.ValueString(),
-		Timeout:              jsonInt64(data.Timeout.ValueInt64()),
-		DegradedAt:           jsonInt64(data.DegradedAt.ValueInt64()),
-		Retry:                jsonInt64(data.Retry.ValueInt64()),
-		FollowRedirects:      data.FollowRedirects.ValueBool(),
-		Active:               data.Active.ValueBool(),
-		Public:               data.Public.ValueBool(),
-		Description:          data.Description.ValueString(),
-		Regions:              regions,
-		Headers:              headers,
-		StatusCodeAssertions: statusCodeAssertions,
-		BodyAssertions:       bodyAssertions,
-		HeaderAssertions:     headerAssertions,
-		OpenTelemetry:        otel,
-	}, diags
+	out := &monitorv1.HTTPMonitor{}
+	out.SetName(data.Name.ValueString())
+	out.SetUrl(data.URL.ValueString())
+	out.SetPeriodicity(periodicity)
+	out.SetMethod(method)
+	out.SetBody(data.Body.ValueString())
+	out.SetTimeout(data.Timeout.ValueInt64())
+	out.SetRetry(data.Retry.ValueInt64())
+	out.SetFollowRedirects(data.FollowRedirects.ValueBool())
+	out.SetActive(data.Active.ValueBool())
+	out.SetPublic(data.Public.ValueBool())
+	out.SetDescription(data.Description.ValueString())
+	out.SetRegions(regions)
+	out.SetHeaders(headers)
+	out.SetStatusCodeAssertions(statusCodeAssertions)
+	out.SetBodyAssertions(bodyAssertions)
+	out.SetHeaderAssertions(headerAssertions)
+	if otel != nil {
+		out.SetOpenTelemetry(otel)
+	}
+	// degraded_at is proto-optional and was previously omitted when zero.
+	if v := data.DegradedAt.ValueInt64(); v != 0 {
+		out.SetDegradedAt(v)
+	}
+	return out, diags
 }
 
-func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMonitorModel) diag.Diagnostics {
+func httpAPIToModel(ctx context.Context, api *monitorv1.HTTPMonitor, data *httpMonitorModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	data.ID = types.StringValue(api.ID)
-	data.Name = types.StringValue(api.Name)
-	data.URL = types.StringValue(api.URL)
-	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.Periodicity))
-	data.Method = types.StringValue(MapMethodFromAPI(api.Method))
-	data.Body = types.StringValue(api.Body)
-	data.Timeout = types.Int64Value(api.Timeout.Int64())
-	data.DegradedAt = types.Int64Value(api.DegradedAt.Int64())
-	data.Retry = types.Int64Value(api.Retry.Int64())
-	data.FollowRedirects = types.BoolValue(api.FollowRedirects)
-	data.Active = types.BoolValue(api.Active)
-	data.Public = types.BoolValue(api.Public)
-	if api.Description != "" || !data.Description.IsNull() {
-		data.Description = types.StringValue(api.Description)
+	data.ID = types.StringValue(api.GetId())
+	data.Name = types.StringValue(api.GetName())
+	data.URL = types.StringValue(api.GetUrl())
+	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.GetPeriodicity()))
+	data.Method = types.StringValue(MapMethodFromAPI(api.GetMethod()))
+	data.Body = types.StringValue(api.GetBody())
+	data.Timeout = types.Int64Value(api.GetTimeout())
+	data.DegradedAt = types.Int64Value(api.GetDegradedAt())
+	data.Retry = types.Int64Value(api.GetRetry())
+	data.FollowRedirects = types.BoolValue(api.GetFollowRedirects())
+	data.Active = types.BoolValue(api.GetActive())
+	data.Public = types.BoolValue(api.GetPublic())
+	if api.GetDescription() != "" || !data.Description.IsNull() {
+		data.Description = types.StringValue(api.GetDescription())
 	}
-	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.Status))
+	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.GetStatus()))
 
-	if len(api.Regions) > 0 {
-		regionVals := MapRegionsFromAPI(api.Regions)
+	if len(api.GetRegions()) > 0 {
+		regionVals := MapRegionsFromAPI(api.GetRegions())
 		regionSet, d := types.SetValueFrom(ctx, types.StringType, regionVals)
 		diags.Append(d...)
 		data.Regions = regionSet
@@ -567,14 +530,14 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 
 	// API returns `headers: [{}]` as a placeholder when no headers are
 	// configured. Drop empty entries so block count matches the plan (#19).
-	headerObjs := make([]attr.Value, 0, len(api.Headers))
-	for _, h := range api.Headers {
-		if h.Key == "" && h.Value == "" {
+	headerObjs := make([]attr.Value, 0, len(api.GetHeaders()))
+	for _, h := range api.GetHeaders() {
+		if h.GetKey() == "" && h.GetValue() == "" {
 			continue
 		}
 		obj, d := types.ObjectValue(headerObjTypes, map[string]attr.Value{
-			"key":   types.StringValue(h.Key),
-			"value": types.StringValue(h.Value),
+			"key":   types.StringValue(h.GetKey()),
+			"value": types.StringValue(h.GetValue()),
 		})
 		diags.Append(d...)
 		headerObjs = append(headerObjs, obj)
@@ -583,12 +546,12 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 	diags.Append(d...)
 	data.Headers = headerList
 
-	if len(api.StatusCodeAssertions) > 0 {
-		objs := make([]attr.Value, 0, len(api.StatusCodeAssertions))
-		for _, a := range api.StatusCodeAssertions {
+	if len(api.GetStatusCodeAssertions()) > 0 {
+		objs := make([]attr.Value, 0, len(api.GetStatusCodeAssertions()))
+		for _, a := range api.GetStatusCodeAssertions() {
 			obj, d := types.ObjectValue(statusCodeAssertionObjTypes, map[string]attr.Value{
-				"target":     types.Int64Value(a.Target.Int64()),
-				"comparator": types.StringValue(MapNumberComparatorFromAPI(a.Comparator)),
+				"target":     types.Int64Value(a.GetTarget()),
+				"comparator": types.StringValue(MapNumberComparatorFromAPI(a.GetComparator())),
 			})
 			diags.Append(d...)
 			objs = append(objs, obj)
@@ -598,12 +561,12 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 		data.StatusCodeAssertions = list
 	}
 
-	if len(api.BodyAssertions) > 0 {
-		objs := make([]attr.Value, 0, len(api.BodyAssertions))
-		for _, a := range api.BodyAssertions {
+	if len(api.GetBodyAssertions()) > 0 {
+		objs := make([]attr.Value, 0, len(api.GetBodyAssertions()))
+		for _, a := range api.GetBodyAssertions() {
 			obj, d := types.ObjectValue(bodyAssertionObjTypes, map[string]attr.Value{
-				"target":     types.StringValue(a.Target),
-				"comparator": types.StringValue(MapStringComparatorFromAPI(a.Comparator)),
+				"target":     types.StringValue(a.GetTarget()),
+				"comparator": types.StringValue(MapStringComparatorFromAPI(a.GetComparator())),
 			})
 			diags.Append(d...)
 			objs = append(objs, obj)
@@ -613,13 +576,13 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 		data.BodyAssertions = list
 	}
 
-	if len(api.HeaderAssertions) > 0 {
-		objs := make([]attr.Value, 0, len(api.HeaderAssertions))
-		for _, a := range api.HeaderAssertions {
+	if len(api.GetHeaderAssertions()) > 0 {
+		objs := make([]attr.Value, 0, len(api.GetHeaderAssertions()))
+		for _, a := range api.GetHeaderAssertions() {
 			obj, d := types.ObjectValue(headerAssertionObjTypes, map[string]attr.Value{
-				"target":     types.StringValue(a.Target),
-				"comparator": types.StringValue(MapStringComparatorFromAPI(a.Comparator)),
-				"key":        types.StringValue(a.Key),
+				"target":     types.StringValue(a.GetTarget()),
+				"comparator": types.StringValue(MapStringComparatorFromAPI(a.GetComparator())),
+				"key":        types.StringValue(a.GetKey()),
 			})
 			diags.Append(d...)
 			objs = append(objs, obj)
@@ -629,16 +592,9 @@ func httpAPIToModel(ctx context.Context, api httpMonitorAPIObject, data *httpMon
 		data.HeaderAssertions = list
 	}
 
-	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry())
 	diags.Append(otelDiags...)
 	data.OpenTelemetry = otelObj
 
 	return diags
-}
-
-func isNotFound(err error) bool {
-	if apiErr, ok := err.(*client.APIError); ok {
-		return apiErr.Code == "not_found"
-	}
-	return false
 }

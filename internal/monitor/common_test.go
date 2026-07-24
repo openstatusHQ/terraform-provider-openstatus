@@ -4,21 +4,23 @@ import (
 	"sort"
 	"strings"
 	"testing"
+
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
 )
 
 func TestMapPeriodicityToAPI(t *testing.T) {
 	tests := []struct {
 		input    string
-		expected string
+		expected monitorv1.Periodicity
 		wantErr  bool
 	}{
-		{"30s", "PERIODICITY_30S", false},
-		{"1m", "PERIODICITY_1M", false},
-		{"5m", "PERIODICITY_5M", false},
-		{"10m", "PERIODICITY_10M", false},
-		{"30m", "PERIODICITY_30M", false},
-		{"1h", "PERIODICITY_1H", false},
-		{"invalid", "", true},
+		{"30s", monitorv1.Periodicity_PERIODICITY_30S, false},
+		{"1m", monitorv1.Periodicity_PERIODICITY_1M, false},
+		{"5m", monitorv1.Periodicity_PERIODICITY_5M, false},
+		{"10m", monitorv1.Periodicity_PERIODICITY_10M, false},
+		{"30m", monitorv1.Periodicity_PERIODICITY_30M, false},
+		{"1h", monitorv1.Periodicity_PERIODICITY_1H, false},
+		{"invalid", monitorv1.Periodicity_PERIODICITY_UNSPECIFIED, true},
 	}
 
 	for _, tt := range tests {
@@ -30,13 +32,13 @@ func TestMapPeriodicityToAPI(t *testing.T) {
 			t.Errorf("MapPeriodicityToAPI(%q) unexpected error: %v", tt.input, err)
 		}
 		if result != tt.expected {
-			t.Errorf("MapPeriodicityToAPI(%q) = %q, want %q", tt.input, result, tt.expected)
+			t.Errorf("MapPeriodicityToAPI(%q) = %v, want %v", tt.input, result, tt.expected)
 		}
 	}
 }
 
 func TestMapPeriodicityFromAPI(t *testing.T) {
-	result := MapPeriodicityFromAPI("PERIODICITY_30S")
+	result := MapPeriodicityFromAPI(monitorv1.Periodicity_PERIODICITY_30S)
 	if result != "30s" {
 		t.Errorf("MapPeriodicityFromAPI(PERIODICITY_30S) = %q, want 30s", result)
 	}
@@ -140,19 +142,85 @@ func TestMapRecordComparatorRoundtrip(t *testing.T) {
 
 func TestMapMonitorStatusFromAPI(t *testing.T) {
 	tests := []struct {
-		input    string
+		input    monitorv1.MonitorStatus
 		expected string
 	}{
-		{"MONITOR_STATUS_ACTIVE", "active"},
-		{"MONITOR_STATUS_DEGRADED", "degraded"},
-		{"MONITOR_STATUS_ERROR", "error"},
-		{"UNKNOWN", "unknown"},
+		{monitorv1.MonitorStatus_MONITOR_STATUS_ACTIVE, "active"},
+		{monitorv1.MonitorStatus_MONITOR_STATUS_DEGRADED, "degraded"},
+		{monitorv1.MonitorStatus_MONITOR_STATUS_ERROR, "error"},
+		{monitorv1.MonitorStatus(99), "unknown"},
 	}
 
 	for _, tt := range tests {
 		result := MapMonitorStatusFromAPI(tt.input)
 		if result != tt.expected {
-			t.Errorf("MapMonitorStatusFromAPI(%q) = %q, want %q", tt.input, result, tt.expected)
+			t.Errorf("MapMonitorStatusFromAPI(%v) = %q, want %q", tt.input, result, tt.expected)
+		}
+	}
+}
+
+func TestEnumMapsCoverEveryGeneratedValue(t *testing.T) {
+	for value, name := range monitorv1.Region_name {
+		region := monitorv1.Region(value)
+		if region == monitorv1.Region_REGION_UNSPECIFIED {
+			continue
+		}
+		if _, ok := regionFromAPI[region]; !ok {
+			t.Errorf("generated region %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.Periodicity_name {
+		p := monitorv1.Periodicity(value)
+		if p == monitorv1.Periodicity_PERIODICITY_UNSPECIFIED {
+			continue
+		}
+		if _, ok := periodicityFromAPI[p]; !ok {
+			t.Errorf("generated periodicity %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.HTTPMethod_name {
+		m := monitorv1.HTTPMethod(value)
+		if m == monitorv1.HTTPMethod_HTTP_METHOD_UNSPECIFIED {
+			continue
+		}
+		if _, ok := methodFromAPI[m]; !ok {
+			t.Errorf("generated method %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.NumberComparator_name {
+		c := monitorv1.NumberComparator(value)
+		if c == monitorv1.NumberComparator_NUMBER_COMPARATOR_UNSPECIFIED {
+			continue
+		}
+		if _, ok := numberComparatorFromAPI[c]; !ok {
+			t.Errorf("generated number comparator %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.StringComparator_name {
+		c := monitorv1.StringComparator(value)
+		if c == monitorv1.StringComparator_STRING_COMPARATOR_UNSPECIFIED {
+			continue
+		}
+		if _, ok := stringComparatorFromAPI[c]; !ok {
+			t.Errorf("generated string comparator %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.RecordComparator_name {
+		c := monitorv1.RecordComparator(value)
+		if c == monitorv1.RecordComparator_RECORD_COMPARATOR_UNSPECIFIED {
+			continue
+		}
+		if _, ok := recordComparatorFromAPI[c]; !ok {
+			t.Errorf("generated record comparator %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.MonitorStatus_name {
+		st := monitorv1.MonitorStatus(value)
+		if st == monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			continue
+		}
+		if _, ok := monitorStatusFromAPI[st]; !ok {
+			t.Errorf("generated monitor status %s is not mapped to a Terraform value", name)
 		}
 	}
 }

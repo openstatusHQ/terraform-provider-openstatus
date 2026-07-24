@@ -5,6 +5,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
@@ -158,42 +162,6 @@ func (r *dnsMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	}
 }
 
-type dnsMonitorAPIObject struct {
-	ID               string               `json:"id,omitempty"`
-	Name             string               `json:"name"`
-	URI              string               `json:"uri"`
-	Periodicity      string               `json:"periodicity"`
-	Timeout          jsonInt64            `json:"timeout"`
-	DegradedAt       jsonInt64            `json:"degradedAt,omitempty"`
-	Retry            jsonInt64            `json:"retry"`
-	Active           bool                 `json:"active"`
-	Public           bool                 `json:"public"`
-	Description      string               `json:"description"`
-	Regions          []string             `json:"regions,omitempty"`
-	RecordAssertions []apiRecordAssertion `json:"recordAssertions,omitempty"`
-	OpenTelemetry    *apiOpenTelemetry    `json:"openTelemetry"`
-	Status           string               `json:"status,omitempty"`
-}
-
-type apiRecordAssertion struct {
-	Record     string `json:"record"`
-	Comparator string `json:"comparator"`
-	Target     string `json:"target"`
-}
-
-type dnsMonitorAPIRequest struct {
-	Monitor dnsMonitorAPIObject `json:"monitor"`
-}
-
-type dnsMonitorAPIUpdateRequest struct {
-	ID      string              `json:"id"`
-	Monitor dnsMonitorAPIObject `json:"monitor"`
-}
-
-type dnsMonitorAPIResponse struct {
-	Monitor dnsMonitorAPIObject `json:"monitor"`
-}
-
 func (r *dnsMonitorResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data dnsMonitorModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -207,15 +175,16 @@ func (r *dnsMonitorResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	var apiResp dnsMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/CreateDNSMonitor",
-		dnsMonitorAPIRequest{Monitor: apiObj}, &apiResp)
+	apiReq := &monitorv1.CreateDNSMonitorRequest{}
+	apiReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.CreateDNSMonitor(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating DNS monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(dnsAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(dnsAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -226,11 +195,12 @@ func (r *dnsMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var apiResp getMonitorResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/GetMonitor",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &monitorv1.GetMonitorRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := r.client.Monitor.GetMonitor(ctx, connect.NewRequest(getReq))
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -238,12 +208,13 @@ func (r *dnsMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	if apiResp.Monitor.DNS == nil {
+	monitor := apiResp.Msg.GetMonitor().GetDns()
+	if monitor == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(dnsAPIToModel(ctx, *apiResp.Monitor.DNS, &data)...)
+	resp.Diagnostics.Append(dnsAPIToModel(ctx, monitor, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -266,15 +237,17 @@ func (r *dnsMonitorResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	var apiResp dnsMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/UpdateDNSMonitor",
-		dnsMonitorAPIUpdateRequest{ID: state.ID.ValueString(), Monitor: apiObj}, &apiResp)
+	updateReq := &monitorv1.UpdateDNSMonitorRequest{}
+	updateReq.SetId(state.ID.ValueString())
+	updateReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.UpdateDNSMonitor(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating DNS monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(dnsAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(dnsAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -285,9 +258,11 @@ func (r *dnsMonitorResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/DeleteMonitor",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &monitorv1.DeleteMonitorRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.Monitor.DeleteMonitor(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting DNS monitor", err.Error())
 	}
 }
@@ -296,30 +271,30 @@ func (r *dnsMonitorResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, idPath, types.StringValue(req.ID))...)
 }
 
-func dnsModelToAPI(ctx context.Context, data dnsMonitorModel) (dnsMonitorAPIObject, diag.Diagnostics) {
+func dnsModelToAPI(ctx context.Context, data dnsMonitorModel) (*monitorv1.DNSMonitor, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	periodicity, err := MapPeriodicityToAPI(data.Periodicity.ValueString())
 	if err != nil {
 		diags.AddError("Invalid periodicity", err.Error())
-		return dnsMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	var regions []string
+	var regions []monitorv1.Region
 	if !data.Regions.IsNull() && !data.Regions.IsUnknown() {
 		var tfRegions []string
 		diags.Append(data.Regions.ElementsAs(ctx, &tfRegions, false)...)
 		if diags.HasError() {
-			return dnsMonitorAPIObject{}, diags
+			return nil, diags
 		}
 		regions, err = MapRegionsToAPI(tfRegions)
 		if err != nil {
 			diags.AddError("Invalid region", err.Error())
-			return dnsMonitorAPIObject{}, diags
+			return nil, diags
 		}
 	}
 
-	var recordAssertions []apiRecordAssertion
+	var recordAssertions []*monitorv1.RecordAssertion
 	if !data.RecordAssertions.IsNull() && !data.RecordAssertions.IsUnknown() {
 		var tfAssertions []struct {
 			Record     string `tfsdk:"record"`
@@ -331,55 +306,61 @@ func dnsModelToAPI(ctx context.Context, data dnsMonitorModel) (dnsMonitorAPIObje
 			comp, mapErr := MapRecordComparatorToAPI(a.Comparator)
 			if mapErr != nil {
 				diags.AddError("Invalid comparator", mapErr.Error())
-				return dnsMonitorAPIObject{}, diags
+				return nil, diags
 			}
-			recordAssertions = append(recordAssertions, apiRecordAssertion{
-				Record: a.Record, Comparator: comp, Target: a.Target,
-			})
+			assertion := &monitorv1.RecordAssertion{}
+			assertion.SetRecord(a.Record)
+			assertion.SetComparator(comp)
+			assertion.SetTarget(a.Target)
+			recordAssertions = append(recordAssertions, assertion)
 		}
 	}
 
 	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
 	diags.Append(otelDiags...)
 	if diags.HasError() {
-		return dnsMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	return dnsMonitorAPIObject{
-		Name:             data.Name.ValueString(),
-		URI:              data.URI.ValueString(),
-		Periodicity:      periodicity,
-		Timeout:          jsonInt64(data.Timeout.ValueInt64()),
-		DegradedAt:       jsonInt64(data.DegradedAt.ValueInt64()),
-		Retry:            jsonInt64(data.Retry.ValueInt64()),
-		Active:           data.Active.ValueBool(),
-		Public:           data.Public.ValueBool(),
-		Description:      data.Description.ValueString(),
-		Regions:          regions,
-		RecordAssertions: recordAssertions,
-		OpenTelemetry:    otel,
-	}, diags
+	out := &monitorv1.DNSMonitor{}
+	out.SetName(data.Name.ValueString())
+	out.SetUri(data.URI.ValueString())
+	out.SetPeriodicity(periodicity)
+	out.SetTimeout(data.Timeout.ValueInt64())
+	out.SetRetry(data.Retry.ValueInt64())
+	out.SetActive(data.Active.ValueBool())
+	out.SetPublic(data.Public.ValueBool())
+	out.SetDescription(data.Description.ValueString())
+	out.SetRegions(regions)
+	out.SetRecordAssertions(recordAssertions)
+	if otel != nil {
+		out.SetOpenTelemetry(otel)
+	}
+	if v := data.DegradedAt.ValueInt64(); v != 0 {
+		out.SetDegradedAt(v)
+	}
+	return out, diags
 }
 
-func dnsAPIToModel(ctx context.Context, api dnsMonitorAPIObject, data *dnsMonitorModel) diag.Diagnostics {
+func dnsAPIToModel(ctx context.Context, api *monitorv1.DNSMonitor, data *dnsMonitorModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	data.ID = types.StringValue(api.ID)
-	data.Name = types.StringValue(api.Name)
-	data.URI = types.StringValue(api.URI)
-	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.Periodicity))
-	data.Timeout = types.Int64Value(api.Timeout.Int64())
-	data.DegradedAt = types.Int64Value(api.DegradedAt.Int64())
-	data.Retry = types.Int64Value(api.Retry.Int64())
-	data.Active = types.BoolValue(api.Active)
-	data.Public = types.BoolValue(api.Public)
-	if api.Description != "" || !data.Description.IsNull() {
-		data.Description = types.StringValue(api.Description)
+	data.ID = types.StringValue(api.GetId())
+	data.Name = types.StringValue(api.GetName())
+	data.URI = types.StringValue(api.GetUri())
+	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.GetPeriodicity()))
+	data.Timeout = types.Int64Value(api.GetTimeout())
+	data.DegradedAt = types.Int64Value(api.GetDegradedAt())
+	data.Retry = types.Int64Value(api.GetRetry())
+	data.Active = types.BoolValue(api.GetActive())
+	data.Public = types.BoolValue(api.GetPublic())
+	if api.GetDescription() != "" || !data.Description.IsNull() {
+		data.Description = types.StringValue(api.GetDescription())
 	}
-	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.Status))
+	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.GetStatus()))
 
-	if len(api.Regions) > 0 {
-		regionVals := MapRegionsFromAPI(api.Regions)
+	if len(api.GetRegions()) > 0 {
+		regionVals := MapRegionsFromAPI(api.GetRegions())
 		regionSet, d := types.SetValueFrom(ctx, types.StringType, regionVals)
 		diags.Append(d...)
 		data.Regions = regionSet
@@ -387,13 +368,13 @@ func dnsAPIToModel(ctx context.Context, api dnsMonitorAPIObject, data *dnsMonito
 		data.Regions = types.SetNull(types.StringType)
 	}
 
-	if len(api.RecordAssertions) > 0 {
-		objs := make([]attr.Value, 0, len(api.RecordAssertions))
-		for _, a := range api.RecordAssertions {
+	if len(api.GetRecordAssertions()) > 0 {
+		objs := make([]attr.Value, 0, len(api.GetRecordAssertions()))
+		for _, a := range api.GetRecordAssertions() {
 			obj, d := types.ObjectValue(recordAssertionObjTypes, map[string]attr.Value{
-				"record":     types.StringValue(a.Record),
-				"comparator": types.StringValue(MapRecordComparatorFromAPI(a.Comparator)),
-				"target":     types.StringValue(a.Target),
+				"record":     types.StringValue(a.GetRecord()),
+				"comparator": types.StringValue(MapRecordComparatorFromAPI(a.GetComparator())),
+				"target":     types.StringValue(a.GetTarget()),
 			})
 			diags.Append(d...)
 			objs = append(objs, obj)
@@ -403,7 +384,7 @@ func dnsAPIToModel(ctx context.Context, api dnsMonitorAPIObject, data *dnsMonito
 		data.RecordAssertions = list
 	}
 
-	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry())
 	diags.Append(otelDiags...)
 	data.OpenTelemetry = otelObj
 

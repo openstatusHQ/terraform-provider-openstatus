@@ -1,77 +1,86 @@
 package monitor
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestDNSMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
-	obj := dnsMonitorAPIObject{
-		Name:        "test",
-		URI:         "example.com",
-		Periodicity: "PERIODICITY_1M",
-		Active:      false,
-		Public:      false,
+func recordAssertionList(record, comparator, target string) types.List {
+	obj, _ := types.ObjectValue(recordAssertionObjTypes, map[string]attr.Value{
+		"record":     types.StringValue(record),
+		"comparator": types.StringValue(comparator),
+		"target":     types.StringValue(target),
+	})
+	list, _ := types.ListValue(types.ObjectType{AttrTypes: recordAssertionObjTypes}, []attr.Value{obj})
+	return list
+}
+
+func TestDNSModelToAPI_DegradedAtPresence(t *testing.T) {
+	data := dnsMonitorModel{
+		Name:        types.StringValue("m"),
+		URI:         types.StringValue("example.com"),
+		Periodicity: types.StringValue("10m"),
+		DegradedAt:  types.Int64Value(0),
 	}
 
-	data, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
+	got, diags := dnsModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if got.HasDegradedAt() {
+		t.Error("degraded_at must stay absent when zero")
 	}
 
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+	data.DegradedAt = types.Int64Value(5000)
+	got, diags = dnsModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-
-	for _, field := range []string{"active", "public"} {
-		val, ok := raw[field]
-		if !ok {
-			t.Errorf("field %q omitted from JSON when false — omitempty must be removed", field)
-			continue
-		}
-		if val != false {
-			t.Errorf("field %q = %v, want false", field, val)
-		}
+	if !got.HasDegradedAt() || got.GetDegradedAt() != 5000 {
+		t.Errorf("degraded_at = %d (present=%v), want 5000 present", got.GetDegradedAt(), got.HasDegradedAt())
 	}
 }
 
-func TestDNSMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
-	obj := dnsMonitorAPIObject{
-		Name:        "m",
-		URI:         "example.com",
-		Periodicity: "PERIODICITY_1M",
-		Description: "",
-		Timeout:     0,
-		Retry:       0,
-	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	for _, field := range []string{"description", "timeout", "retry"} {
-		if _, ok := raw[field]; !ok {
-			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
-		}
+func TestDNSModelToAPI_RejectsUnknownComparator(t *testing.T) {
+	_, diags := dnsModelToAPI(context.Background(), dnsMonitorModel{
+		Periodicity:      types.StringValue("10m"),
+		RecordAssertions: recordAssertionList("A", "starts_with", "1.2.3.4"),
+	})
+	if !diags.HasError() {
+		t.Error("expected an error for an unknown record comparator")
 	}
 }
 
-func TestGetMonitorResponse_NestedMonitorWrapper_DNS(t *testing.T) {
-	apiJSON := `{"monitor":{"dns":{"name":"DNS Check","uri":"example.com"}}}`
-
-	var resp getMonitorResponse
-	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+func TestDNSAPIToModel_RecordAssertionsRoundTrip(t *testing.T) {
+	api, diags := dnsModelToAPI(context.Background(), dnsMonitorModel{
+		Name:             types.StringValue("DNS"),
+		URI:              types.StringValue("example.com"),
+		Periodicity:      types.StringValue("10m"),
+		RecordAssertions: recordAssertionList("A", "eq", "93.184.216.34"),
+	})
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
 
-	if resp.Monitor.DNS == nil {
-		t.Fatal("expected monitor.dns to be parsed, got nil")
+	var data dnsMonitorModel
+	if diags := dnsAPIToModel(context.Background(), api, &data); diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	if resp.Monitor.DNS.Name != "DNS Check" {
-		t.Errorf("name = %q, want %q", resp.Monitor.DNS.Name, "DNS Check")
+	elems := data.RecordAssertions.Elements()
+	if len(elems) != 1 {
+		t.Fatalf("RecordAssertions length = %d, want 1", len(elems))
+	}
+	attrs := elems[0].(types.Object).Attributes()
+	if got := attrs["record"].(types.String).ValueString(); got != "A" {
+		t.Errorf("record = %q, want A", got)
+	}
+	if got := attrs["comparator"].(types.String).ValueString(); got != "eq" {
+		t.Errorf("comparator = %q, want eq", got)
+	}
+	if got := attrs["target"].(types.String).ValueString(); got != "93.184.216.34" {
+		t.Errorf("target = %q, want 93.184.216.34", got)
 	}
 }

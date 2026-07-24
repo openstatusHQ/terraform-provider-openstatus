@@ -1,84 +1,121 @@
 package monitor
 
 import (
-	"encoding/json"
+	"context"
 	"testing"
+
+	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestAPIOpenTelemetry_MarshalShape(t *testing.T) {
-	otel := apiOpenTelemetry{
-		Endpoint: "https://otel.example.com",
-		Headers:  []apiHeader{{Key: "X-Api-Key", Value: "secret"}},
+func otelObject(endpoint string, headers ...[2]string) types.Object {
+	headerObjs := make([]attr.Value, 0, len(headers))
+	for _, h := range headers {
+		obj, _ := types.ObjectValue(openTelemetryHeaderObjTypes, map[string]attr.Value{
+			"key":   types.StringValue(h[0]),
+			"value": types.StringValue(h[1]),
+		})
+		headerObjs = append(headerObjs, obj)
 	}
-	b, err := json.Marshal(otel)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	list, _ := types.ListValue(types.ObjectType{AttrTypes: openTelemetryHeaderObjTypes}, headerObjs)
+	obj, _ := types.ObjectValue(openTelemetryObjTypes, map[string]attr.Value{
+		"endpoint": types.StringValue(endpoint),
+		"headers":  list,
+	})
+	return obj
+}
+
+func TestOpenTelemetryToAPI_NullAndUnknownAreNil(t *testing.T) {
+	got, diags := openTelemetryToAPI(context.Background(), types.ObjectNull(openTelemetryObjTypes))
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if got != nil {
+		t.Errorf("null object should map to nil, got %v", got)
 	}
-	if raw["endpoint"] != "https://otel.example.com" {
-		t.Errorf("endpoint = %v, want https://otel.example.com", raw["endpoint"])
+
+	got, diags = openTelemetryToAPI(context.Background(), types.ObjectUnknown(openTelemetryObjTypes))
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	headers, ok := raw["headers"].([]interface{})
-	if !ok || len(headers) != 1 {
-		t.Fatalf("headers = %v, want one entry", raw["headers"])
-	}
-	h := headers[0].(map[string]interface{})
-	if h["key"] != "X-Api-Key" || h["value"] != "secret" {
-		t.Errorf("headers[0] = %v, want {key:X-Api-Key, value:secret}", h)
+	if got != nil {
+		t.Errorf("unknown object should map to nil, got %v", got)
 	}
 }
 
-func TestHTTPMonitorAPIObject_OpenTelemetryNullWhenAbsent(t *testing.T) {
-	obj := httpMonitorAPIObject{
-		Name:        "m",
-		URL:         "https://example.com",
-		Periodicity: "PERIODICITY_1M",
+func TestOpenTelemetryToAPI_SetsEndpointAndHeaders(t *testing.T) {
+	got, diags := openTelemetryToAPI(context.Background(),
+		otelObject("https://otel.example.com/v1/metrics", [2]string{"X-Api-Key", "secret"}))
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if got.GetEndpoint() != "https://otel.example.com/v1/metrics" {
+		t.Errorf("endpoint = %q, want https://otel.example.com/v1/metrics", got.GetEndpoint())
 	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+	if len(got.GetHeaders()) != 1 {
+		t.Fatalf("headers length = %d, want 1", len(got.GetHeaders()))
 	}
-	otel, ok := raw["openTelemetry"]
-	if !ok {
-		t.Fatalf("openTelemetry must be present (sent as null to clear server-side)")
-	}
-	if string(otel) != "null" {
-		t.Errorf("openTelemetry = %s, want null", string(otel))
+	if got.GetHeaders()[0].GetKey() != "X-Api-Key" || got.GetHeaders()[0].GetValue() != "secret" {
+		t.Errorf("header = %v, want X-Api-Key/secret", got.GetHeaders()[0])
 	}
 }
 
-func TestHTTPMonitorAPIObject_OpenTelemetryRoundTrip(t *testing.T) {
-	in := httpMonitorAPIObject{
-		Name:        "m",
-		URL:         "https://example.com",
-		Periodicity: "PERIODICITY_1M",
-		OpenTelemetry: &apiOpenTelemetry{
-			Endpoint: "https://otel.example.com",
-			Headers:  []apiHeader{{Key: "k", Value: "v"}},
-		},
+func TestOpenTelemetryFromAPI_NilIsNullObject(t *testing.T) {
+	got, diags := openTelemetryFromAPI(context.Background(), nil)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	b, err := json.Marshal(in)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if !got.IsNull() {
+		t.Errorf("nil config should map to a null object, got %v", got)
 	}
-	var out httpMonitorAPIObject
-	if err := json.Unmarshal(b, &out); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+}
+
+func TestOpenTelemetryRoundTrip(t *testing.T) {
+	in := otelObject("https://otel.example.com", [2]string{"a", "b"}, [2]string{"c", "d"})
+
+	api, diags := openTelemetryToAPI(context.Background(), in)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	if out.OpenTelemetry == nil {
-		t.Fatal("OpenTelemetry round-tripped to nil")
+	out, diags := openTelemetryFromAPI(context.Background(), api)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
-	if out.OpenTelemetry.Endpoint != "https://otel.example.com" {
-		t.Errorf("endpoint = %q, want https://otel.example.com", out.OpenTelemetry.Endpoint)
+
+	if out.Attributes()["endpoint"].(types.String).ValueString() != "https://otel.example.com" {
+		t.Errorf("endpoint did not round-trip, got %v", out.Attributes()["endpoint"])
 	}
-	if len(out.OpenTelemetry.Headers) != 1 || out.OpenTelemetry.Headers[0].Key != "k" {
-		t.Errorf("headers = %v, want [{k,v}]", out.OpenTelemetry.Headers)
+	headers := out.Attributes()["headers"].(types.List).Elements()
+	if len(headers) != 2 {
+		t.Fatalf("headers length = %d, want 2", len(headers))
+	}
+}
+
+func TestHTTPMonitorOpenTelemetryPresence(t *testing.T) {
+	data := httpMonitorModel{
+		Name:        types.StringValue("m"),
+		URL:         types.StringValue("https://example.com"),
+		Periodicity: types.StringValue("1m"),
+		Method:      types.StringValue("GET"),
+	}
+
+	got, diags := httpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if got.GetOpenTelemetry() != nil {
+		t.Error("open_telemetry should stay absent when the block is omitted")
+	}
+
+	data.OpenTelemetry = otelObject("https://otel.example.com")
+	got, diags = httpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if got.GetOpenTelemetry() == nil {
+		t.Fatal("open_telemetry should be set when the block is present")
+	}
+	if got.GetOpenTelemetry().GetEndpoint() != "https://otel.example.com" {
+		t.Errorf("endpoint = %q, want https://otel.example.com", got.GetOpenTelemetry().GetEndpoint())
 	}
 }

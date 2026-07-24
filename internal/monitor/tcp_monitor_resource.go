@@ -5,6 +5,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/int64validator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/setvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -131,35 +135,6 @@ func (r *tcpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 	}
 }
 
-type tcpMonitorAPIObject struct {
-	ID            string            `json:"id,omitempty"`
-	Name          string            `json:"name"`
-	URI           string            `json:"uri"`
-	Periodicity   string            `json:"periodicity"`
-	Timeout       jsonInt64         `json:"timeout"`
-	DegradedAt    jsonInt64         `json:"degradedAt,omitempty"`
-	Retry         jsonInt64         `json:"retry"`
-	Active        bool              `json:"active"`
-	Public        bool              `json:"public"`
-	Description   string            `json:"description"`
-	Regions       []string          `json:"regions,omitempty"`
-	OpenTelemetry *apiOpenTelemetry `json:"openTelemetry"`
-	Status        string            `json:"status,omitempty"`
-}
-
-type tcpMonitorAPIRequest struct {
-	Monitor tcpMonitorAPIObject `json:"monitor"`
-}
-
-type tcpMonitorAPIUpdateRequest struct {
-	ID      string              `json:"id"`
-	Monitor tcpMonitorAPIObject `json:"monitor"`
-}
-
-type tcpMonitorAPIResponse struct {
-	Monitor tcpMonitorAPIObject `json:"monitor"`
-}
-
 func (r *tcpMonitorResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data tcpMonitorModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -173,15 +148,16 @@ func (r *tcpMonitorResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	var apiResp tcpMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/CreateTCPMonitor",
-		tcpMonitorAPIRequest{Monitor: apiObj}, &apiResp)
+	apiReq := &monitorv1.CreateTCPMonitorRequest{}
+	apiReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.CreateTCPMonitor(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating TCP monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(tcpAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(tcpAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -192,11 +168,12 @@ func (r *tcpMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var apiResp getMonitorResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/GetMonitor",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &monitorv1.GetMonitorRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := r.client.Monitor.GetMonitor(ctx, connect.NewRequest(getReq))
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -204,12 +181,13 @@ func (r *tcpMonitorResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	if apiResp.Monitor.TCP == nil {
+	monitor := apiResp.Msg.GetMonitor().GetTcp()
+	if monitor == nil {
 		resp.State.RemoveResource(ctx)
 		return
 	}
 
-	resp.Diagnostics.Append(tcpAPIToModel(ctx, *apiResp.Monitor.TCP, &data)...)
+	resp.Diagnostics.Append(tcpAPIToModel(ctx, monitor, &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -232,15 +210,17 @@ func (r *tcpMonitorResource) Update(ctx context.Context, req resource.UpdateRequ
 		return
 	}
 
-	var apiResp tcpMonitorAPIResponse
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/UpdateTCPMonitor",
-		tcpMonitorAPIUpdateRequest{ID: state.ID.ValueString(), Monitor: apiObj}, &apiResp)
+	updateReq := &monitorv1.UpdateTCPMonitorRequest{}
+	updateReq.SetId(state.ID.ValueString())
+	updateReq.SetMonitor(apiObj)
+
+	apiResp, err := r.client.Monitor.UpdateTCPMonitor(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating TCP monitor", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(tcpAPIToModel(ctx, apiResp.Monitor, &data)...)
+	resp.Diagnostics.Append(tcpAPIToModel(ctx, apiResp.Msg.GetMonitor(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -251,9 +231,11 @@ func (r *tcpMonitorResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/DeleteMonitor",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &monitorv1.DeleteMonitorRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.Monitor.DeleteMonitor(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting TCP monitor", err.Error())
 	}
 }
@@ -262,69 +244,73 @@ func (r *tcpMonitorResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, idPath, types.StringValue(req.ID))...)
 }
 
-func tcpModelToAPI(ctx context.Context, data tcpMonitorModel) (tcpMonitorAPIObject, diag.Diagnostics) {
+func tcpModelToAPI(ctx context.Context, data tcpMonitorModel) (*monitorv1.TCPMonitor, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	periodicity, err := MapPeriodicityToAPI(data.Periodicity.ValueString())
 	if err != nil {
 		diags.AddError("Invalid periodicity", err.Error())
-		return tcpMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	var regions []string
+	var regions []monitorv1.Region
 	if !data.Regions.IsNull() && !data.Regions.IsUnknown() {
 		var tfRegions []string
 		diags.Append(data.Regions.ElementsAs(ctx, &tfRegions, false)...)
 		if diags.HasError() {
-			return tcpMonitorAPIObject{}, diags
+			return nil, diags
 		}
 		regions, err = MapRegionsToAPI(tfRegions)
 		if err != nil {
 			diags.AddError("Invalid region", err.Error())
-			return tcpMonitorAPIObject{}, diags
+			return nil, diags
 		}
 	}
 
 	otel, otelDiags := openTelemetryToAPI(ctx, data.OpenTelemetry)
 	diags.Append(otelDiags...)
 	if diags.HasError() {
-		return tcpMonitorAPIObject{}, diags
+		return nil, diags
 	}
 
-	return tcpMonitorAPIObject{
-		Name:          data.Name.ValueString(),
-		URI:           data.URI.ValueString(),
-		Periodicity:   periodicity,
-		Timeout:       jsonInt64(data.Timeout.ValueInt64()),
-		DegradedAt:    jsonInt64(data.DegradedAt.ValueInt64()),
-		Retry:         jsonInt64(data.Retry.ValueInt64()),
-		Active:        data.Active.ValueBool(),
-		Public:        data.Public.ValueBool(),
-		Description:   data.Description.ValueString(),
-		Regions:       regions,
-		OpenTelemetry: otel,
-	}, diags
+	out := &monitorv1.TCPMonitor{}
+	out.SetName(data.Name.ValueString())
+	out.SetUri(data.URI.ValueString())
+	out.SetPeriodicity(periodicity)
+	out.SetTimeout(data.Timeout.ValueInt64())
+	out.SetRetry(data.Retry.ValueInt64())
+	out.SetActive(data.Active.ValueBool())
+	out.SetPublic(data.Public.ValueBool())
+	out.SetDescription(data.Description.ValueString())
+	out.SetRegions(regions)
+	if otel != nil {
+		out.SetOpenTelemetry(otel)
+	}
+	if v := data.DegradedAt.ValueInt64(); v != 0 {
+		out.SetDegradedAt(v)
+	}
+	return out, diags
 }
 
-func tcpAPIToModel(ctx context.Context, api tcpMonitorAPIObject, data *tcpMonitorModel) diag.Diagnostics {
+func tcpAPIToModel(ctx context.Context, api *monitorv1.TCPMonitor, data *tcpMonitorModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	data.ID = types.StringValue(api.ID)
-	data.Name = types.StringValue(api.Name)
-	data.URI = types.StringValue(api.URI)
-	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.Periodicity))
-	data.Timeout = types.Int64Value(api.Timeout.Int64())
-	data.DegradedAt = types.Int64Value(api.DegradedAt.Int64())
-	data.Retry = types.Int64Value(api.Retry.Int64())
-	data.Active = types.BoolValue(api.Active)
-	data.Public = types.BoolValue(api.Public)
-	if api.Description != "" || !data.Description.IsNull() {
-		data.Description = types.StringValue(api.Description)
+	data.ID = types.StringValue(api.GetId())
+	data.Name = types.StringValue(api.GetName())
+	data.URI = types.StringValue(api.GetUri())
+	data.Periodicity = types.StringValue(MapPeriodicityFromAPI(api.GetPeriodicity()))
+	data.Timeout = types.Int64Value(api.GetTimeout())
+	data.DegradedAt = types.Int64Value(api.GetDegradedAt())
+	data.Retry = types.Int64Value(api.GetRetry())
+	data.Active = types.BoolValue(api.GetActive())
+	data.Public = types.BoolValue(api.GetPublic())
+	if api.GetDescription() != "" || !data.Description.IsNull() {
+		data.Description = types.StringValue(api.GetDescription())
 	}
-	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.Status))
+	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.GetStatus()))
 
-	if len(api.Regions) > 0 {
-		regionVals := MapRegionsFromAPI(api.Regions)
+	if len(api.GetRegions()) > 0 {
+		regionVals := MapRegionsFromAPI(api.GetRegions())
 		regionSet, d := types.SetValueFrom(ctx, types.StringType, regionVals)
 		diags.Append(d...)
 		data.Regions = regionSet
@@ -332,7 +318,7 @@ func tcpAPIToModel(ctx context.Context, api tcpMonitorAPIObject, data *tcpMonito
 		data.Regions = types.SetNull(types.StringType)
 	}
 
-	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.OpenTelemetry)
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry())
 	diags.Append(otelDiags...)
 	data.OpenTelemetry = otelObj
 

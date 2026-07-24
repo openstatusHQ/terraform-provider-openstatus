@@ -5,6 +5,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -72,17 +76,6 @@ func (d *monitorsDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 	}
 }
 
-type listMonitorsRequest struct {
-	Limit  int64 `json:"limit,omitempty"`
-	Offset int64 `json:"offset,omitempty"`
-}
-
-type listMonitorsResponse struct {
-	HTTPMonitors []httpMonitorAPIObject `json:"httpMonitors"`
-	TCPMonitors  []tcpMonitorAPIObject  `json:"tcpMonitors"`
-	DNSMonitors  []dnsMonitorAPIObject  `json:"dnsMonitors"`
-}
-
 func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	var data monitorsDataSourceModel
 	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
@@ -90,44 +83,44 @@ func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadReques
 		return
 	}
 
-	apiReq := listMonitorsRequest{
-		Limit:  data.Limit.ValueInt64(),
-		Offset: data.Offset.ValueInt64(),
-	}
-	if apiReq.Limit == 0 {
-		apiReq.Limit = 50
+	limit := data.Limit.ValueInt64()
+	if limit == 0 {
+		limit = 50
 	}
 
-	var apiResp listMonitorsResponse
-	err := d.client.Do(ctx, "/openstatus.monitor.v1.MonitorService/ListMonitors", apiReq, &apiResp)
+	apiReq := &monitorv1.ListMonitorsRequest{}
+	apiReq.SetLimit(int32(limit))
+	apiReq.SetOffset(int32(data.Offset.ValueInt64()))
+
+	apiResp, err := d.client.Monitor.ListMonitors(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error listing monitors", err.Error())
 		return
 	}
 
 	objs := make([]attr.Value, 0)
-	for _, m := range apiResp.HTTPMonitors {
+	for _, m := range apiResp.Msg.GetHttpMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.ID),
-			"name": types.StringValue(m.Name),
+			"id":   types.StringValue(m.GetId()),
+			"name": types.StringValue(m.GetName()),
 			"type": types.StringValue("http"),
 		})
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
-	for _, m := range apiResp.TCPMonitors {
+	for _, m := range apiResp.Msg.GetTcpMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.ID),
-			"name": types.StringValue(m.Name),
+			"id":   types.StringValue(m.GetId()),
+			"name": types.StringValue(m.GetName()),
 			"type": types.StringValue("tcp"),
 		})
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
-	for _, m := range apiResp.DNSMonitors {
+	for _, m := range apiResp.Msg.GetDnsMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.ID),
-			"name": types.StringValue(m.Name),
+			"id":   types.StringValue(m.GetId()),
+			"name": types.StringValue(m.GetName()),
 			"type": types.StringValue("dns"),
 		})
 		resp.Diagnostics.Append(diags...)
