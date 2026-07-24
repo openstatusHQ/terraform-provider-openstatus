@@ -6,6 +6,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	notificationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/notification/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -217,71 +221,42 @@ func (r *notificationResource) Schema(_ context.Context, _ resource.SchemaReques
 	}
 }
 
-var providerTypeToAPI = map[string]string{
-	"discord":        "NOTIFICATION_PROVIDER_DISCORD",
-	"email":          "NOTIFICATION_PROVIDER_EMAIL",
-	"slack":          "NOTIFICATION_PROVIDER_SLACK",
-	"pagerduty":      "NOTIFICATION_PROVIDER_PAGERDUTY",
-	"opsgenie":       "NOTIFICATION_PROVIDER_OPSGENIE",
-	"webhook":        "NOTIFICATION_PROVIDER_WEBHOOK",
-	"telegram":       "NOTIFICATION_PROVIDER_TELEGRAM",
-	"sms":            "NOTIFICATION_PROVIDER_SMS",
-	"whatsapp":       "NOTIFICATION_PROVIDER_WHATSAPP",
-	"google_chat":    "NOTIFICATION_PROVIDER_GOOGLE_CHAT",
-	"grafana_oncall": "NOTIFICATION_PROVIDER_GRAFANA_ONCALL",
-	"ntfy":           "NOTIFICATION_PROVIDER_NTFY",
-	"ms_teams":       "NOTIFICATION_PROVIDER_MS_TEAMS",
+var providerTypeToAPI = map[string]notificationv1.NotificationProvider{
+	"discord":        notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_DISCORD,
+	"email":          notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_EMAIL,
+	"slack":          notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_SLACK,
+	"pagerduty":      notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_PAGERDUTY,
+	"opsgenie":       notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_OPSGENIE,
+	"webhook":        notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_WEBHOOK,
+	"telegram":       notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_TELEGRAM,
+	"sms":            notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_SMS,
+	"whatsapp":       notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_WHATSAPP,
+	"google_chat":    notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_GOOGLE_CHAT,
+	"grafana_oncall": notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_GRAFANA_ONCALL,
+	"ntfy":           notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_NTFY,
+	"ms_teams":       notificationv1.NotificationProvider_NOTIFICATION_PROVIDER_MS_TEAMS,
 }
 
-var providerTypeFromAPI = func() map[string]string {
-	m := make(map[string]string, len(providerTypeToAPI))
+var providerTypeFromAPI = func() map[notificationv1.NotificationProvider]string {
+	m := make(map[notificationv1.NotificationProvider]string, len(providerTypeToAPI))
 	for k, v := range providerTypeToAPI {
 		m[v] = k
 	}
 	return m
 }()
 
-var opsgenieRegionToAPI = map[string]string{
-	"us": "OPSGENIE_REGION_US",
-	"eu": "OPSGENIE_REGION_EU",
+var opsgenieRegionToAPI = map[string]notificationv1.OpsgenieRegion{
+	"us": notificationv1.OpsgenieRegion_OPSGENIE_REGION_US,
+	"eu": notificationv1.OpsgenieRegion_OPSGENIE_REGION_EU,
 }
 
-var opsgenieRegionFromAPI = func() map[string]string {
-	m := make(map[string]string, len(opsgenieRegionToAPI))
+var opsgenieRegionFromAPI = func() map[notificationv1.OpsgenieRegion]string {
+	m := make(map[notificationv1.OpsgenieRegion]string, len(opsgenieRegionToAPI))
 	for k, v := range opsgenieRegionToAPI {
 		m[v] = k
 	}
 	return m
 }()
-
-type apiNotificationCreateRequest struct {
-	Name       string                 `json:"name,omitempty"`
-	Provider   string                 `json:"provider"`
-	Data       map[string]interface{} `json:"data"`
-	MonitorIDs []string               `json:"monitorIds,omitempty"`
-}
-
-type apiNotificationUpdateRequest struct {
-	ID               string                 `json:"id"`
-	Name             string                 `json:"name,omitempty"`
-	Data             map[string]interface{} `json:"data,omitempty"`
-	MonitorIDs       []string               `json:"monitorIds"`
-	UpdateMonitorIDs bool                   `json:"updateMonitorIds"`
-}
-
-type apiNotificationResponse struct {
-	Notification apiNotification `json:"notification"`
-}
-
-type apiNotification struct {
-	ID         string                 `json:"id"`
-	Name       string                 `json:"name"`
-	Provider   string                 `json:"provider"`
-	Data       map[string]interface{} `json:"data"`
-	MonitorIDs []string               `json:"monitorIds"`
-	CreatedAt  string                 `json:"createdAt"`
-	UpdatedAt  string                 `json:"updatedAt"`
-}
 
 func (r *notificationResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data notificationModel
@@ -296,14 +271,13 @@ func (r *notificationResource) Create(ctx context.Context, req resource.CreateRe
 		return
 	}
 
-	var apiResp apiNotificationResponse
-	err := r.client.Do(ctx, "/openstatus.notification.v1.NotificationService/CreateNotification", apiReq, &apiResp)
+	apiResp, err := r.client.Notification.CreateNotification(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating notification", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Notification, &data)...)
+	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Msg.GetNotification(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -314,11 +288,12 @@ func (r *notificationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	var apiResp apiNotificationResponse
-	err := r.client.Do(ctx, "/openstatus.notification.v1.NotificationService/GetNotification",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &notificationv1.GetNotificationRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := r.client.Notification.GetNotification(ctx, connect.NewRequest(getReq))
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -326,7 +301,7 @@ func (r *notificationResource) Read(ctx context.Context, req resource.ReadReques
 		return
 	}
 
-	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Notification, &data)...)
+	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Msg.GetNotification(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -354,22 +329,15 @@ func (r *notificationResource) Update(ctx context.Context, req resource.UpdateRe
 		resp.Diagnostics.Append(data.MonitorIDs.ElementsAs(ctx, &monitorIDs, false)...)
 	}
 
-	updateReq := apiNotificationUpdateRequest{
-		ID:               state.ID.ValueString(),
-		Name:             data.Name.ValueString(),
-		Data:             providerData,
-		MonitorIDs:       monitorIDs,
-		UpdateMonitorIDs: true,
-	}
+	updateReq := newNotificationUpdateRequest(state.ID.ValueString(), data.Name.ValueString(), providerData, monitorIDs)
 
-	var apiResp apiNotificationResponse
-	err := r.client.Do(ctx, "/openstatus.notification.v1.NotificationService/UpdateNotification", updateReq, &apiResp)
+	apiResp, err := r.client.Notification.UpdateNotification(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating notification", err.Error())
 		return
 	}
 
-	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Notification, &data)...)
+	resp.Diagnostics.Append(notificationAPIToModel(ctx, apiResp.Msg.GetNotification(), &data)...)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -380,9 +348,11 @@ func (r *notificationResource) Delete(ctx context.Context, req resource.DeleteRe
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.notification.v1.NotificationService/DeleteNotification",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &notificationv1.DeleteNotificationRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.Notification.DeleteNotification(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting notification", err.Error())
 	}
 }
@@ -391,19 +361,19 @@ func (r *notificationResource) ImportState(ctx context.Context, req resource.Imp
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-func notificationModelToAPI(ctx context.Context, data notificationModel) (apiNotificationCreateRequest, diag.Diagnostics) {
+func notificationModelToAPI(ctx context.Context, data notificationModel) (*notificationv1.CreateNotificationRequest, diag.Diagnostics) {
 	var diags diag.Diagnostics
 
 	providerAPI, ok := providerTypeToAPI[data.ProviderType.ValueString()]
 	if !ok {
 		diags.AddError("Invalid provider type", "Unknown provider: "+data.ProviderType.ValueString())
-		return apiNotificationCreateRequest{}, diags
+		return nil, diags
 	}
 
 	providerData, d := extractProviderData(ctx, data)
 	diags.Append(d...)
 	if diags.HasError() {
-		return apiNotificationCreateRequest{}, diags
+		return nil, diags
 	}
 
 	var monitorIDs []string
@@ -411,112 +381,162 @@ func notificationModelToAPI(ctx context.Context, data notificationModel) (apiNot
 		diags.Append(data.MonitorIDs.ElementsAs(ctx, &monitorIDs, false)...)
 	}
 
-	return apiNotificationCreateRequest{
-		Name:       data.Name.ValueString(),
-		Provider:   providerAPI,
-		Data:       providerData,
-		MonitorIDs: monitorIDs,
-	}, diags
+	req := &notificationv1.CreateNotificationRequest{}
+	req.SetName(data.Name.ValueString())
+	req.SetProvider(providerAPI)
+	req.SetData(providerData)
+	req.SetMonitorIds(monitorIDs)
+	return req, diags
 }
 
-func extractProviderData(ctx context.Context, data notificationModel) (map[string]interface{}, diag.Diagnostics) {
+// newNotificationUpdateRequest always sets update_monitor_ids so Terraform
+// stays authoritative over the association.
+func newNotificationUpdateRequest(id, name string, data *notificationv1.NotificationData, monitorIDs []string) *notificationv1.UpdateNotificationRequest {
+	req := &notificationv1.UpdateNotificationRequest{}
+	req.SetId(id)
+	req.SetName(name)
+	req.SetData(data)
+	req.SetMonitorIds(monitorIDs)
+	req.SetUpdateMonitorIds(true)
+	return req
+}
+
+func singleBlock(list types.List, diags *diag.Diagnostics, label string) (types.Object, bool) {
+	elems := list.Elements()
+	if len(elems) == 0 {
+		diags.AddError("Missing block", "Expected exactly one "+label+" block")
+		return types.Object{}, false
+	}
+	obj, ok := elems[0].(types.Object)
+	if !ok {
+		diags.AddError("Invalid block", "Expected an object for the "+label+" block")
+		return types.Object{}, false
+	}
+	return obj, true
+}
+
+func stringAttr(obj types.Object, name string) string {
+	v, ok := obj.Attributes()[name]
+	if !ok {
+		return ""
+	}
+	s, ok := v.(types.String)
+	if !ok {
+		return ""
+	}
+	return s.ValueString()
+}
+
+func extractProviderData(ctx context.Context, data notificationModel) (*notificationv1.NotificationData, diag.Diagnostics) {
 	var diags diag.Diagnostics
+	result := &notificationv1.NotificationData{}
 	pt := data.ProviderType.ValueString()
 
-	var inner map[string]interface{}
-	var wrapKey string
+	webhookURL := func(list types.List, label string) string {
+		obj, ok := singleBlock(list, &diags, label)
+		if !ok {
+			return ""
+		}
+		return stringAttr(obj, "webhook_url")
+	}
 
 	switch pt {
 	case "discord":
-		wrapKey = "discord"
-		inner, diags = extractWebhookBlock(ctx, data.Discord, &diags)
+		inner := &notificationv1.DiscordData{}
+		inner.SetWebhookUrl(webhookURL(data.Discord, "discord"))
+		result.SetDiscord(inner)
 	case "email":
-		wrapKey = "email"
-		inner, diags = extractSingleFieldBlock(ctx, data.Email, "email", "email", &diags)
+		obj, ok := singleBlock(data.Email, &diags, "email")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.EmailData{}
+		inner.SetEmail(stringAttr(obj, "email"))
+		result.SetEmail(inner)
 	case "slack":
-		wrapKey = "slack"
-		inner, diags = extractWebhookBlock(ctx, data.Slack, &diags)
+		inner := &notificationv1.SlackData{}
+		inner.SetWebhookUrl(webhookURL(data.Slack, "slack"))
+		result.SetSlack(inner)
 	case "pagerduty":
-		wrapKey = "pagerduty"
-		inner, diags = extractSingleFieldBlock(ctx, data.PagerDuty, "integration_key", "integrationKey", &diags)
+		obj, ok := singleBlock(data.PagerDuty, &diags, "pagerduty")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.PagerDutyData{}
+		inner.SetIntegrationKey(stringAttr(obj, "integration_key"))
+		result.SetPagerduty(inner)
 	case "opsgenie":
-		wrapKey = "opsgenie"
-		inner, diags = extractOpsgenieBlock(ctx, data.Opsgenie, &diags)
+		obj, ok := singleBlock(data.Opsgenie, &diags, "opsgenie")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.OpsgenieData{}
+		inner.SetApiKey(stringAttr(obj, "api_key"))
+		inner.SetRegion(opsgenieRegionToAPI[stringAttr(obj, "region")])
+		result.SetOpsgenie(inner)
 	case "webhook":
-		wrapKey = "webhook"
-		inner, diags = extractWebhookEndpointBlock(ctx, data.Webhook, &diags)
+		inner, d := extractWebhookEndpointBlock(ctx, data.Webhook)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		result.SetWebhook(inner)
 	case "telegram":
-		wrapKey = "telegram"
-		inner, diags = extractSingleFieldBlock(ctx, data.Telegram, "chat_id", "chatId", &diags)
+		obj, ok := singleBlock(data.Telegram, &diags, "telegram")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.TelegramData{}
+		inner.SetChatId(stringAttr(obj, "chat_id"))
+		result.SetTelegram(inner)
 	case "sms":
-		wrapKey = "sms"
-		inner, diags = extractSingleFieldBlock(ctx, data.SMS, "phone_number", "phoneNumber", &diags)
+		obj, ok := singleBlock(data.SMS, &diags, "sms")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.SmsData{}
+		inner.SetPhoneNumber(stringAttr(obj, "phone_number"))
+		result.SetSms(inner)
 	case "whatsapp":
-		wrapKey = "whatsapp"
-		inner, diags = extractSingleFieldBlock(ctx, data.WhatsApp, "phone_number", "phoneNumber", &diags)
+		obj, ok := singleBlock(data.WhatsApp, &diags, "whatsapp")
+		if !ok {
+			return nil, diags
+		}
+		inner := &notificationv1.WhatsappData{}
+		inner.SetPhoneNumber(stringAttr(obj, "phone_number"))
+		result.SetWhatsapp(inner)
 	case "google_chat":
-		wrapKey = "googleChat"
-		inner, diags = extractWebhookBlock(ctx, data.GoogleChat, &diags)
+		inner := &notificationv1.GoogleChatData{}
+		inner.SetWebhookUrl(webhookURL(data.GoogleChat, "google_chat"))
+		result.SetGoogleChat(inner)
 	case "grafana_oncall":
-		wrapKey = "grafanaOncall"
-		inner, diags = extractWebhookBlock(ctx, data.GrafanaOncall, &diags)
+		inner := &notificationv1.GrafanaOncallData{}
+		inner.SetWebhookUrl(webhookURL(data.GrafanaOncall, "grafana_oncall"))
+		result.SetGrafanaOncall(inner)
 	case "ntfy":
-		wrapKey = "ntfy"
-		inner, diags = extractNtfyBlock(ctx, data.Ntfy, &diags)
+		inner, d := extractNtfyBlock(data.Ntfy)
+		diags.Append(d...)
+		if diags.HasError() {
+			return nil, diags
+		}
+		result.SetNtfy(inner)
 	case "ms_teams":
-		wrapKey = "msTeams"
-		inner, diags = extractWebhookBlock(ctx, data.MSTeams, &diags)
+		inner := &notificationv1.MsTeamsData{}
+		inner.SetWebhookUrl(webhookURL(data.MSTeams, "ms_teams"))
+		result.SetMsTeams(inner)
+	default:
+		diags.AddError("Unknown provider", "No data block for provider: "+pt)
+		return nil, diags
 	}
 
 	if diags.HasError() {
 		return nil, diags
 	}
-	if wrapKey != "" {
-		return map[string]interface{}{wrapKey: inner}, diags
-	}
-
-	diags.AddError("Unknown provider", "No data block for provider: "+pt)
-	return nil, diags
+	return result, diags
 }
 
-func extractWebhookBlock(ctx context.Context, list types.List, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
-	var items []struct {
-		WebhookURL string `tfsdk:"webhook_url"`
-	}
-	diags.Append(list.ElementsAs(ctx, &items, false)...)
-	if len(items) == 0 {
-		diags.AddError("Missing block", "Expected exactly one block")
-		return nil, *diags
-	}
-	return map[string]interface{}{"webhookUrl": items[0].WebhookURL}, *diags
-}
-
-func extractSingleFieldBlock(ctx context.Context, list types.List, tfField, apiField string, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
-	elems := list.Elements()
-	if len(elems) == 0 {
-		diags.AddError("Missing block", "Expected exactly one block")
-		return nil, *diags
-	}
-	obj := elems[0].(types.Object)
-	val := obj.Attributes()[tfField].(types.String)
-	return map[string]interface{}{apiField: val.ValueString()}, *diags
-}
-
-func extractOpsgenieBlock(ctx context.Context, list types.List, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
-	var items []struct {
-		APIKey string `tfsdk:"api_key"`
-		Region string `tfsdk:"region"`
-	}
-	diags.Append(list.ElementsAs(ctx, &items, false)...)
-	if len(items) == 0 {
-		diags.AddError("Missing block", "Expected exactly one opsgenie block")
-		return nil, *diags
-	}
-	regionAPI := opsgenieRegionToAPI[items[0].Region]
-	return map[string]interface{}{"apiKey": items[0].APIKey, "region": regionAPI}, *diags
-}
-
-func extractWebhookEndpointBlock(ctx context.Context, list types.List, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
+func extractWebhookEndpointBlock(ctx context.Context, list types.List) (*notificationv1.WebhookData, diag.Diagnostics) {
+	var diags diag.Diagnostics
 	var items []struct {
 		Endpoint string `tfsdk:"endpoint"`
 		Headers  []struct {
@@ -527,53 +547,53 @@ func extractWebhookEndpointBlock(ctx context.Context, list types.List, diags *di
 	diags.Append(list.ElementsAs(ctx, &items, false)...)
 	if len(items) == 0 {
 		diags.AddError("Missing block", "Expected exactly one webhook block")
-		return nil, *diags
+		return nil, diags
 	}
-	result := map[string]interface{}{"endpoint": items[0].Endpoint}
+
+	result := &notificationv1.WebhookData{}
+	result.SetEndpoint(items[0].Endpoint)
 	if len(items[0].Headers) > 0 {
-		headers := make([]map[string]string, 0, len(items[0].Headers))
+		headers := make([]*notificationv1.WebhookHeader, 0, len(items[0].Headers))
 		for _, h := range items[0].Headers {
-			headers = append(headers, map[string]string{"key": h.Key, "value": h.Value})
+			header := &notificationv1.WebhookHeader{}
+			header.SetKey(h.Key)
+			header.SetValue(h.Value)
+			headers = append(headers, header)
 		}
-		result["headers"] = headers
+		result.SetHeaders(headers)
 	}
-	return result, *diags
+	return result, diags
 }
 
-func extractNtfyBlock(ctx context.Context, list types.List, diags *diag.Diagnostics) (map[string]interface{}, diag.Diagnostics) {
-	// Optional fields must use types.String so null values (i.e. attribute
-	// omitted in HCL) round-trip without conversion errors. Plain `string`
-	// fails ElementsAs with "Received null value, however the target type
-	// cannot handle null values".
-	var items []struct {
-		Topic     string       `tfsdk:"topic"`
-		ServerURL types.String `tfsdk:"server_url"`
-		Token     types.String `tfsdk:"token"`
+// extractNtfyBlock only sets the optional fields when non-empty, so an omitted
+// server_url or token is absent on the wire rather than an empty string.
+func extractNtfyBlock(list types.List) (*notificationv1.NtfyData, diag.Diagnostics) {
+	var diags diag.Diagnostics
+	obj, ok := singleBlock(list, &diags, "ntfy")
+	if !ok {
+		return nil, diags
 	}
-	diags.Append(list.ElementsAs(ctx, &items, false)...)
-	if len(items) == 0 {
-		diags.AddError("Missing block", "Expected exactly one ntfy block")
-		return nil, *diags
+
+	result := &notificationv1.NtfyData{}
+	result.SetTopic(stringAttr(obj, "topic"))
+	if v := stringAttr(obj, "server_url"); v != "" {
+		result.SetServerUrl(v)
 	}
-	result := map[string]interface{}{"topic": items[0].Topic}
-	if v := items[0].ServerURL.ValueString(); v != "" {
-		result["serverUrl"] = v
+	if v := stringAttr(obj, "token"); v != "" {
+		result.SetToken(v)
 	}
-	if v := items[0].Token.ValueString(); v != "" {
-		result["token"] = v
-	}
-	return result, *diags
+	return result, diags
 }
 
-func notificationAPIToModel(ctx context.Context, api apiNotification, data *notificationModel) diag.Diagnostics {
+func notificationAPIToModel(ctx context.Context, api *notificationv1.Notification, data *notificationModel) diag.Diagnostics {
 	var diags diag.Diagnostics
 
-	data.ID = types.StringValue(api.ID)
-	data.Name = types.StringValue(api.Name)
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
+	data.ID = types.StringValue(api.GetId())
+	data.Name = types.StringValue(api.GetName())
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 
-	if pt, ok := providerTypeFromAPI[api.Provider]; ok {
+	if pt, ok := providerTypeFromAPI[api.GetProvider()]; ok {
 		data.ProviderType = types.StringValue(pt)
 	} else {
 		diags.AddWarning(
@@ -581,13 +601,13 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 			fmt.Sprintf(
 				"OpenStatus returned provider %q which this provider version does not recognize. "+
 					"State for notification %q may be incomplete; upgrade the openstatus provider to manage this resource.",
-				api.Provider, api.ID,
+				api.GetProvider().String(), api.GetId(),
 			),
 		)
 	}
 
-	if len(api.MonitorIDs) > 0 {
-		monitorSet, d := types.SetValueFrom(ctx, types.StringType, api.MonitorIDs)
+	if len(api.GetMonitorIds()) > 0 {
+		monitorSet, d := types.SetValueFrom(ctx, types.StringType, api.GetMonitorIds())
 		diags.Append(d...)
 		data.MonitorIDs = monitorSet
 	} else {
@@ -595,10 +615,7 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 	}
 
 	pt := data.ProviderType.ValueString()
-
-	// The API wraps provider data under a discriminator key (e.g. {"email": {"email": "..."}}).
-	// Unwrap it to get the inner data object.
-	apiData := unwrapProviderData(api.Data, pt)
+	apiData := api.GetData()
 
 	nullList := func(attrTypes map[string]attr.Type) types.List {
 		return types.ListNull(types.ObjectType{AttrTypes: attrTypes})
@@ -642,79 +659,77 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 	switch pt {
 	case "discord":
 		data.Discord = buildSingleObjList(ctx, discordType, map[string]attr.Value{
-			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+			"webhook_url": types.StringValue(apiData.GetDiscord().GetWebhookUrl()),
 		}, &diags)
 	case "email":
 		data.Email = buildSingleObjList(ctx, emailType, map[string]attr.Value{
-			"email": types.StringValue(strFromData(apiData, "email")),
+			"email": types.StringValue(apiData.GetEmail().GetEmail()),
 		}, &diags)
 	case "slack":
 		data.Slack = buildSingleObjList(ctx, slackType, map[string]attr.Value{
-			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+			"webhook_url": types.StringValue(apiData.GetSlack().GetWebhookUrl()),
 		}, &diags)
 	case "pagerduty":
 		data.PagerDuty = buildSingleObjList(ctx, pagerdutyType, map[string]attr.Value{
-			"integration_key": types.StringValue(strFromData(apiData, "integrationKey")),
+			"integration_key": types.StringValue(apiData.GetPagerduty().GetIntegrationKey()),
 		}, &diags)
 	case "opsgenie":
-		region := strFromData(apiData, "region")
-		if r, ok := opsgenieRegionFromAPI[region]; ok {
+		apiRegion := apiData.GetOpsgenie().GetRegion()
+		region := ""
+		if r, ok := opsgenieRegionFromAPI[apiRegion]; ok {
 			region = r
-		} else if region != "" {
+		} else if apiRegion != notificationv1.OpsgenieRegion_OPSGENIE_REGION_UNSPECIFIED {
+			region = apiRegion.String()
 			diags.AddWarning(
 				"Unknown Opsgenie region",
 				fmt.Sprintf(
 					"OpenStatus returned Opsgenie region %q which this provider version does not recognize. "+
 						"State for notification %q may show the raw enum value.",
-					region, api.ID,
+					region, api.GetId(),
 				),
 			)
 		}
 		data.Opsgenie = buildSingleObjList(ctx, opsgenieType, map[string]attr.Value{
-			"api_key": types.StringValue(strFromData(apiData, "apiKey")),
+			"api_key": types.StringValue(apiData.GetOpsgenie().GetApiKey()),
 			"region":  types.StringValue(region),
 		}, &diags)
 	case "webhook":
 		headersVal := types.ListNull(types.ObjectType{AttrTypes: webhookHeaderObjTypes})
-		if rawHeaders, ok := apiData["headers"]; ok {
-			if headersList, ok := rawHeaders.([]interface{}); ok && len(headersList) > 0 {
-				headerObjs := make([]attr.Value, 0, len(headersList))
-				for _, h := range headersList {
-					if hMap, ok := h.(map[string]interface{}); ok {
-						obj, d := types.ObjectValue(webhookHeaderObjTypes, map[string]attr.Value{
-							"key":   types.StringValue(strFromMap(hMap, "key")),
-							"value": types.StringValue(strFromMap(hMap, "value")),
-						})
-						diags.Append(d...)
-						headerObjs = append(headerObjs, obj)
-					}
-				}
-				headersVal, _ = types.ListValue(types.ObjectType{AttrTypes: webhookHeaderObjTypes}, headerObjs)
+		if apiHeaders := apiData.GetWebhook().GetHeaders(); len(apiHeaders) > 0 {
+			headerObjs := make([]attr.Value, 0, len(apiHeaders))
+			for _, h := range apiHeaders {
+				obj, d := types.ObjectValue(webhookHeaderObjTypes, map[string]attr.Value{
+					"key":   types.StringValue(h.GetKey()),
+					"value": types.StringValue(h.GetValue()),
+				})
+				diags.Append(d...)
+				headerObjs = append(headerObjs, obj)
 			}
+			headersVal, _ = types.ListValue(types.ObjectType{AttrTypes: webhookHeaderObjTypes}, headerObjs)
 		}
 		data.Webhook = buildSingleObjList(ctx, webhookType, map[string]attr.Value{
-			"endpoint": types.StringValue(strFromData(apiData, "endpoint")),
+			"endpoint": types.StringValue(apiData.GetWebhook().GetEndpoint()),
 			"headers":  headersVal,
 		}, &diags)
 	case "telegram":
 		data.Telegram = buildSingleObjList(ctx, telegramType, map[string]attr.Value{
-			"chat_id": types.StringValue(strFromData(apiData, "chatId")),
+			"chat_id": types.StringValue(apiData.GetTelegram().GetChatId()),
 		}, &diags)
 	case "sms":
 		data.SMS = buildSingleObjList(ctx, smsType, map[string]attr.Value{
-			"phone_number": types.StringValue(strFromData(apiData, "phoneNumber")),
+			"phone_number": types.StringValue(apiData.GetSms().GetPhoneNumber()),
 		}, &diags)
 	case "whatsapp":
 		data.WhatsApp = buildSingleObjList(ctx, whatsappType, map[string]attr.Value{
-			"phone_number": types.StringValue(strFromData(apiData, "phoneNumber")),
+			"phone_number": types.StringValue(apiData.GetWhatsapp().GetPhoneNumber()),
 		}, &diags)
 	case "google_chat":
 		data.GoogleChat = buildSingleObjList(ctx, googleChatType, map[string]attr.Value{
-			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+			"webhook_url": types.StringValue(apiData.GetGoogleChat().GetWebhookUrl()),
 		}, &diags)
 	case "grafana_oncall":
 		data.GrafanaOncall = buildSingleObjList(ctx, grafanaOncallType, map[string]attr.Value{
-			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+			"webhook_url": types.StringValue(apiData.GetGrafanaOncall().GetWebhookUrl()),
 		}, &diags)
 	case "ntfy":
 		// The API does not echo back ntfy.token (Sensitive). If the response
@@ -724,19 +739,19 @@ func notificationAPIToModel(ctx context.Context, api apiNotification, data *noti
 		// (null vs value): if the user omitted token in HCL the planned
 		// value is null, so post-apply state must be null too.
 		var token types.String
-		if v := strFromData(apiData, "token"); v != "" {
+		if v := apiData.GetNtfy().GetToken(); v != "" {
 			token = types.StringValue(v)
 		} else {
 			token = plannedNtfyToken
 		}
 		data.Ntfy = buildSingleObjList(ctx, ntfyType, map[string]attr.Value{
-			"topic":      types.StringValue(strFromData(apiData, "topic")),
-			"server_url": types.StringValue(strFromData(apiData, "serverUrl")),
+			"topic":      types.StringValue(apiData.GetNtfy().GetTopic()),
+			"server_url": types.StringValue(apiData.GetNtfy().GetServerUrl()),
 			"token":      token,
 		}, &diags)
 	case "ms_teams":
 		data.MSTeams = buildSingleObjList(ctx, msTeamsType, map[string]attr.Value{
-			"webhook_url": types.StringValue(strFromData(apiData, "webhookUrl")),
+			"webhook_url": types.StringValue(apiData.GetMsTeams().GetWebhookUrl()),
 		}, &diags)
 	}
 
@@ -778,58 +793,4 @@ func existingNtfyStringField(list types.List, attr string) types.String {
 		return types.StringNull()
 	}
 	return s
-}
-
-func strFromData(data map[string]interface{}, key string) string {
-	if v, ok := data[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-func strFromMap(m map[string]interface{}, key string) string {
-	if v, ok := m[key]; ok {
-		if s, ok := v.(string); ok {
-			return s
-		}
-	}
-	return ""
-}
-
-var providerTypeToWrapKey = map[string]string{
-	"discord":        "discord",
-	"email":          "email",
-	"slack":          "slack",
-	"pagerduty":      "pagerduty",
-	"opsgenie":       "opsgenie",
-	"webhook":        "webhook",
-	"telegram":       "telegram",
-	"sms":            "sms",
-	"whatsapp":       "whatsapp",
-	"google_chat":    "googleChat",
-	"grafana_oncall": "grafanaOncall",
-	"ntfy":           "ntfy",
-	"ms_teams":       "msTeams",
-}
-
-func unwrapProviderData(data map[string]interface{}, providerType string) map[string]interface{} {
-	wrapKey, ok := providerTypeToWrapKey[providerType]
-	if !ok {
-		return data
-	}
-	if inner, ok := data[wrapKey]; ok {
-		if innerMap, ok := inner.(map[string]interface{}); ok {
-			return innerMap
-		}
-	}
-	return data
-}
-
-func isNotFound(err error) bool {
-	if apiErr, ok := err.(*client.APIError); ok {
-		return apiErr.Code == "not_found"
-	}
-	return false
 }
