@@ -6,6 +6,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	notificationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/notification/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -68,21 +72,22 @@ func (d *notificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 		return
 	}
 
-	var apiResp apiNotificationResponse
-	err := d.client.Do(ctx, "/openstatus.notification.v1.NotificationService/GetNotification",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &notificationv1.GetNotificationRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := d.client.Notification.GetNotification(ctx, connect.NewRequest(getReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading notification", err.Error())
 		return
 	}
 
-	api := apiResp.Notification
-	data.ID = types.StringValue(api.ID)
-	data.Name = types.StringValue(api.Name)
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
+	api := apiResp.Msg.GetNotification()
+	data.ID = types.StringValue(api.GetId())
+	data.Name = types.StringValue(api.GetName())
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 
-	if pt, ok := providerTypeFromAPI[api.Provider]; ok {
+	if pt, ok := providerTypeFromAPI[api.GetProvider()]; ok {
 		data.ProviderType = types.StringValue(pt)
 	} else {
 		resp.Diagnostics.AddWarning(
@@ -90,13 +95,13 @@ func (d *notificationDataSource) Read(ctx context.Context, req datasource.ReadRe
 			fmt.Sprintf(
 				"OpenStatus returned provider %q which this provider version does not recognize. "+
 					"State for notification %q may be incomplete; upgrade the openstatus provider to manage this resource.",
-				api.Provider, api.ID,
+				api.GetProvider().String(), api.GetId(),
 			),
 		)
 	}
 
-	if len(api.MonitorIDs) > 0 {
-		monitorSet, diags := types.SetValueFrom(ctx, types.StringType, api.MonitorIDs)
+	if len(api.GetMonitorIds()) > 0 {
+		monitorSet, diags := types.SetValueFrom(ctx, types.StringType, api.GetMonitorIds())
 		resp.Diagnostics.Append(diags...)
 		data.MonitorIDs = monitorSet
 	} else {
