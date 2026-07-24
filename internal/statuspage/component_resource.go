@@ -6,6 +6,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -103,57 +107,6 @@ func (r *componentResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 	}
 }
 
-type apiAddMonitorComponentRequest struct {
-	PageID      string `json:"pageId"`
-	MonitorID   string `json:"monitorId"`
-	Name        string `json:"name,omitempty"`
-	Description string `json:"description,omitempty"`
-	Order       *int64 `json:"order,omitempty"`
-	GroupID     string `json:"groupId,omitempty"`
-	GroupOrder  *int64 `json:"groupOrder,omitempty"`
-}
-
-type apiAddStaticComponentRequest struct {
-	PageID      string `json:"pageId"`
-	Name        string `json:"name"`
-	Description string `json:"description,omitempty"`
-	Order       *int64 `json:"order,omitempty"`
-	GroupID     string `json:"groupId,omitempty"`
-	GroupOrder  *int64 `json:"groupOrder,omitempty"`
-}
-
-type apiComponentResponse struct {
-	Component apiComponent `json:"component"`
-}
-
-type apiComponent struct {
-	ID          string `json:"id"`
-	PageID      string `json:"pageId"`
-	Name        string `json:"name"`
-	Description string `json:"description"`
-	Type        string `json:"type"`
-	MonitorID   string `json:"monitorId"`
-	Order       *int64 `json:"order"`
-	GroupID     string `json:"groupId"`
-	GroupOrder  *int64 `json:"groupOrder"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
-}
-
-type apiUpdateComponentRequest struct {
-	ID          string  `json:"id"`
-	Name        *string `json:"name,omitempty"`
-	Description *string `json:"description,omitempty"`
-	Order       *int64  `json:"order,omitempty"`
-	GroupID     *string `json:"groupId,omitempty"`
-	GroupOrder  *int64  `json:"groupOrder,omitempty"`
-}
-
-type apiStatusPageContentResponse struct {
-	Components []apiComponent      `json:"components"`
-	Groups     []apiComponentGroup `json:"groups"`
-}
-
 func (r *componentResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data componentModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -161,42 +114,38 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	var apiResp apiComponentResponse
+	var component *statuspagev1.PageComponent
 	var err error
 
 	if data.Type.ValueString() == "monitor" {
-		apiReq := apiAddMonitorComponentRequest{
-			PageID:      data.PageID.ValueString(),
-			MonitorID:   data.MonitorID.ValueString(),
-			Name:        data.Name.ValueString(),
-			Description: data.Description.ValueString(),
-			GroupID:     data.GroupID.ValueString(),
-		}
+		apiReq := &statuspagev1.AddMonitorComponentRequest{}
+		apiReq.SetPageId(data.PageID.ValueString())
+		apiReq.SetMonitorId(data.MonitorID.ValueString())
+		apiReq.SetName(data.Name.ValueString())
+		apiReq.SetDescription(data.Description.ValueString())
+		apiReq.SetGroupId(data.GroupID.ValueString())
 		if !data.Order.IsNull() && !data.Order.IsUnknown() {
-			v := data.Order.ValueInt64()
-			apiReq.Order = &v
+			apiReq.SetOrder(int32(data.Order.ValueInt64()))
 		}
-		if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
-			v := data.GroupOrder.ValueInt64()
-			apiReq.GroupOrder = &v
+		var apiResp *connect.Response[statuspagev1.AddMonitorComponentResponse]
+		apiResp, err = r.client.StatusPage.AddMonitorComponent(ctx, connect.NewRequest(apiReq))
+		if apiResp != nil {
+			component = apiResp.Msg.GetComponent()
 		}
-		err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/AddMonitorComponent", apiReq, &apiResp)
 	} else {
-		apiReq := apiAddStaticComponentRequest{
-			PageID:      data.PageID.ValueString(),
-			Name:        data.Name.ValueString(),
-			Description: data.Description.ValueString(),
-			GroupID:     data.GroupID.ValueString(),
-		}
+		apiReq := &statuspagev1.AddStaticComponentRequest{}
+		apiReq.SetPageId(data.PageID.ValueString())
+		apiReq.SetName(data.Name.ValueString())
+		apiReq.SetDescription(data.Description.ValueString())
+		apiReq.SetGroupId(data.GroupID.ValueString())
 		if !data.Order.IsNull() && !data.Order.IsUnknown() {
-			v := data.Order.ValueInt64()
-			apiReq.Order = &v
+			apiReq.SetOrder(int32(data.Order.ValueInt64()))
 		}
-		if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
-			v := data.GroupOrder.ValueInt64()
-			apiReq.GroupOrder = &v
+		var apiResp *connect.Response[statuspagev1.AddStaticComponentResponse]
+		apiResp, err = r.client.StatusPage.AddStaticComponent(ctx, connect.NewRequest(apiReq))
+		if apiResp != nil {
+			component = apiResp.Msg.GetComponent()
 		}
-		err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/AddStaticComponent", apiReq, &apiResp)
 	}
 
 	if err != nil {
@@ -204,7 +153,7 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
-	componentAPIToModel(apiResp.Component, &data)
+	componentAPIToModel(component, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -217,7 +166,7 @@ func (r *componentResource) Read(ctx context.Context, req resource.ReadRequest, 
 
 	comp, err := r.findComponent(ctx, data.PageID.ValueString(), data.ID.ValueString())
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -229,7 +178,7 @@ func (r *componentResource) Read(ctx context.Context, req resource.ReadRequest, 
 		return
 	}
 
-	componentAPIToModel(*comp, &data)
+	componentAPIToModel(comp, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -246,36 +195,31 @@ func (r *componentResource) Update(ctx context.Context, req resource.UpdateReque
 		return
 	}
 
-	updateReq := apiUpdateComponentRequest{ID: state.ID.ValueString()}
+	updateReq := &statuspagev1.UpdateComponentRequest{}
+	updateReq.SetId(state.ID.ValueString())
 	if !data.Name.IsNull() {
-		v := data.Name.ValueString()
-		updateReq.Name = &v
+		updateReq.SetName(data.Name.ValueString())
 	}
 	if !data.Description.IsNull() {
-		v := data.Description.ValueString()
-		updateReq.Description = &v
+		updateReq.SetDescription(data.Description.ValueString())
 	}
 	if !data.Order.IsNull() && !data.Order.IsUnknown() {
-		v := data.Order.ValueInt64()
-		updateReq.Order = &v
+		updateReq.SetOrder(int32(data.Order.ValueInt64()))
 	}
 	if !data.GroupID.IsNull() && !data.GroupID.IsUnknown() {
-		v := data.GroupID.ValueString()
-		updateReq.GroupID = &v
+		updateReq.SetGroupId(data.GroupID.ValueString())
 	}
 	if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
-		v := data.GroupOrder.ValueInt64()
-		updateReq.GroupOrder = &v
+		updateReq.SetGroupOrder(int32(data.GroupOrder.ValueInt64()))
 	}
 
-	var apiResp apiComponentResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/UpdateComponent", updateReq, &apiResp)
+	apiResp, err := r.client.StatusPage.UpdateComponent(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating component", err.Error())
 		return
 	}
 
-	componentAPIToModel(apiResp.Component, &data)
+	componentAPIToModel(apiResp.Msg.GetComponent(), &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -286,9 +230,11 @@ func (r *componentResource) Delete(ctx context.Context, req resource.DeleteReque
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/RemoveComponent",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	removeReq := &statuspagev1.RemoveComponentRequest{}
+	removeReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.StatusPage.RemoveComponent(ctx, connect.NewRequest(removeReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting component", err.Error())
 	}
 }
@@ -303,57 +249,61 @@ func (r *componentResource) ImportState(ctx context.Context, req resource.Import
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(parts[1]))...)
 }
 
-func (r *componentResource) findComponent(ctx context.Context, pageID, componentID string) (*apiComponent, error) {
-	var contentResp apiStatusPageContentResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPageContent",
-		map[string]string{"id": pageID}, &contentResp)
+func (r *componentResource) findComponent(ctx context.Context, pageID, componentID string) (*statuspagev1.PageComponent, error) {
+	contentReq := &statuspagev1.GetStatusPageContentRequest{}
+	contentReq.SetId(pageID)
+
+	contentResp, err := r.client.StatusPage.GetStatusPageContent(ctx, connect.NewRequest(contentReq))
 	if err != nil {
 		return nil, err
 	}
-	for _, c := range contentResp.Components {
-		if c.ID == componentID {
-			return &c, nil
+	for _, c := range contentResp.Msg.GetComponents() {
+		if c.GetId() == componentID {
+			return c, nil
 		}
 	}
 	return nil, nil
 }
 
-func componentAPIToModel(api apiComponent, data *componentModel) {
-	data.ID = types.StringValue(api.ID)
-	data.PageID = types.StringValue(api.PageID)
-	if api.Name != "" {
-		data.Name = types.StringValue(api.Name)
+// order and group_order carry no field presence in the proto, and protojson
+// omits zero values, so a zero from the API is indistinguishable from an
+// omitted field. Both are treated as "not reported": keep the existing value,
+// collapsing unknown to null.
+func componentAPIToModel(api *statuspagev1.PageComponent, data *componentModel) {
+	data.ID = types.StringValue(api.GetId())
+	data.PageID = types.StringValue(api.GetPageId())
+	if api.GetName() != "" {
+		data.Name = types.StringValue(api.GetName())
 	}
-	if api.Description != "" {
-		data.Description = types.StringValue(api.Description)
+	if api.GetDescription() != "" {
+		data.Description = types.StringValue(api.GetDescription())
 	}
-	if api.Order != nil {
-		data.Order = types.Int64Value(*api.Order)
+	if api.GetOrder() != 0 {
+		data.Order = types.Int64Value(int64(api.GetOrder()))
 	} else if data.Order.IsUnknown() {
 		data.Order = types.Int64Null()
 	}
-	if api.GroupOrder != nil {
-		data.GroupOrder = types.Int64Value(*api.GroupOrder)
+	if api.GetGroupOrder() != 0 {
+		data.GroupOrder = types.Int64Value(int64(api.GetGroupOrder()))
 	} else if data.GroupOrder.IsUnknown() {
 		data.GroupOrder = types.Int64Null()
 	}
-	if api.GroupID != "" {
-		data.GroupID = types.StringValue(api.GroupID)
+	if api.GetGroupId() != "" {
+		data.GroupID = types.StringValue(api.GetGroupId())
 	}
-	if api.MonitorID != "" {
-		data.MonitorID = types.StringValue(api.MonitorID)
+	if api.GetMonitorId() != "" {
+		data.MonitorID = types.StringValue(api.GetMonitorId())
 	}
 
-	switch api.Type {
-	case "PAGE_COMPONENT_TYPE_MONITOR":
+	switch api.GetType() {
+	case statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_MONITOR:
 		data.Type = types.StringValue("monitor")
-	case "PAGE_COMPONENT_TYPE_STATIC":
+	case statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_STATIC:
 		data.Type = types.StringValue("static")
 	default:
-		data.Type = types.StringValue(api.Type)
+		data.Type = types.StringValue(api.GetType().String())
 	}
 
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 }
-
