@@ -1,5 +1,6 @@
 # Local planning notes — not part of the published provider
 plan-bug.md
+plan.md
 
 # Built provider binary (top-level only; just build outputs here)
 /terraform-provider-openstatus
