@@ -12,6 +12,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
@@ -35,9 +36,10 @@ type monitorsDataSourceModel struct {
 }
 
 var monitorSummaryObjTypes = map[string]attr.Type{
-	"id":   types.StringType,
-	"name": types.StringType,
-	"type": types.StringType,
+	"id":                   types.StringType,
+	"name":                 types.StringType,
+	"type":                 types.StringType,
+	"private_location_ids": types.SetType{ElemType: types.StringType},
 }
 
 func (d *monitorsDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -69,6 +71,10 @@ func (d *monitorsDataSource) Schema(_ context.Context, _ datasource.SchemaReques
 						"id":   schema.StringAttribute{Computed: true},
 						"name": schema.StringAttribute{Computed: true},
 						"type": schema.StringAttribute{Computed: true},
+						"private_location_ids": schema.SetAttribute{
+							Computed:    true,
+							ElementType: types.StringType,
+						},
 					},
 				},
 			},
@@ -101,27 +107,30 @@ func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadReques
 	objs := make([]attr.Value, 0)
 	for _, m := range apiResp.Msg.GetHttpMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.GetId()),
-			"name": types.StringValue(m.GetName()),
-			"type": types.StringValue("http"),
+			"id":                   types.StringValue(m.GetId()),
+			"name":                 types.StringValue(m.GetName()),
+			"type":                 types.StringValue("http"),
+			"private_location_ids": privateLocationSet(ctx, m.GetPrivateLocationIds(), &resp.Diagnostics),
 		})
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
 	for _, m := range apiResp.Msg.GetTcpMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.GetId()),
-			"name": types.StringValue(m.GetName()),
-			"type": types.StringValue("tcp"),
+			"id":                   types.StringValue(m.GetId()),
+			"name":                 types.StringValue(m.GetName()),
+			"type":                 types.StringValue("tcp"),
+			"private_location_ids": privateLocationSet(ctx, m.GetPrivateLocationIds(), &resp.Diagnostics),
 		})
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
 	for _, m := range apiResp.Msg.GetDnsMonitors() {
 		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
-			"id":   types.StringValue(m.GetId()),
-			"name": types.StringValue(m.GetName()),
-			"type": types.StringValue("dns"),
+			"id":                   types.StringValue(m.GetId()),
+			"name":                 types.StringValue(m.GetName()),
+			"type":                 types.StringValue("dns"),
+			"private_location_ids": privateLocationSet(ctx, m.GetPrivateLocationIds(), &resp.Diagnostics),
 		})
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
@@ -132,4 +141,10 @@ func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadReques
 	data.Monitors = monitorList
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func privateLocationSet(ctx context.Context, ids []string, diags *diag.Diagnostics) types.Set {
+	set, d := types.SetValueFrom(ctx, types.StringType, ids)
+	diags.Append(d...)
+	return set
 }

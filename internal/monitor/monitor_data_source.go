@@ -28,18 +28,19 @@ type monitorDataSource struct {
 }
 
 type monitorDataSourceModel struct {
-	ID          types.String `tfsdk:"id"`
-	Type        types.String `tfsdk:"type"`
-	Name        types.String `tfsdk:"name"`
-	URL         types.String `tfsdk:"url"`
-	URI         types.String `tfsdk:"uri"`
-	Periodicity types.String `tfsdk:"periodicity"`
-	Method      types.String `tfsdk:"method"`
-	Active      types.Bool   `tfsdk:"active"`
-	Public      types.Bool   `tfsdk:"public"`
-	Description types.String `tfsdk:"description"`
-	Timeout     types.Int64  `tfsdk:"timeout"`
-	Status      types.String `tfsdk:"status"`
+	ID                 types.String `tfsdk:"id"`
+	Type               types.String `tfsdk:"type"`
+	Name               types.String `tfsdk:"name"`
+	URL                types.String `tfsdk:"url"`
+	URI                types.String `tfsdk:"uri"`
+	Periodicity        types.String `tfsdk:"periodicity"`
+	Method             types.String `tfsdk:"method"`
+	Active             types.Bool   `tfsdk:"active"`
+	Public             types.Bool   `tfsdk:"public"`
+	Description        types.String `tfsdk:"description"`
+	Timeout            types.Int64  `tfsdk:"timeout"`
+	Status             types.String `tfsdk:"status"`
+	PrivateLocationIDs types.Set    `tfsdk:"private_location_ids"`
 }
 
 func (d *monitorDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -69,6 +70,11 @@ func (d *monitorDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 			"description": schema.StringAttribute{Computed: true},
 			"timeout":     schema.Int64Attribute{Computed: true},
 			"status":      schema.StringAttribute{Computed: true},
+			"private_location_ids": schema.SetAttribute{
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "IDs of the private locations that run this monitor.",
+			},
 		},
 	}
 }
@@ -136,5 +142,21 @@ func (d *monitorDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		return
 	}
 
+	privateLocationSet, diags := types.SetValueFrom(ctx, types.StringType, privateLocationIDs(config))
+	resp.Diagnostics.Append(diags...)
+	data.PrivateLocationIDs = privateLocationSet
+
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+func privateLocationIDs(config *monitorv1.MonitorConfig) []string {
+	switch {
+	case config.GetHttp() != nil:
+		return config.GetHttp().GetPrivateLocationIds()
+	case config.GetTcp() != nil:
+		return config.GetTcp().GetPrivateLocationIds()
+	case config.GetDns() != nil:
+		return config.GetDns().GetPrivateLocationIds()
+	}
+	return nil
 }
