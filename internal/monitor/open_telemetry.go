@@ -3,6 +3,8 @@ package monitor
 import (
 	"context"
 
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
@@ -12,18 +14,6 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-framework/types/basetypes"
 )
-
-// apiHeader is shared with the HTTP monitor's top-level headers block —
-// both come from the proto `Headers` message.
-type apiHeader struct {
-	Key   string `json:"key"`
-	Value string `json:"value"`
-}
-
-type apiOpenTelemetry struct {
-	Endpoint string      `json:"endpoint"`
-	Headers  []apiHeader `json:"headers,omitempty"`
-}
 
 var openTelemetryHeaderObjTypes = map[string]attr.Type{
 	"key":   types.StringType,
@@ -68,7 +58,7 @@ type otelTF struct {
 	Headers  []otelHeaderTF `tfsdk:"headers"`
 }
 
-func openTelemetryToAPI(ctx context.Context, obj types.Object) (*apiOpenTelemetry, diag.Diagnostics) {
+func openTelemetryToAPI(ctx context.Context, obj types.Object) (*monitorv1.OpenTelemetryConfig, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if obj.IsNull() || obj.IsUnknown() {
 		return nil, diags
@@ -78,23 +68,32 @@ func openTelemetryToAPI(ctx context.Context, obj types.Object) (*apiOpenTelemetr
 	if diags.HasError() {
 		return nil, diags
 	}
-	out := &apiOpenTelemetry{Endpoint: src.Endpoint}
+
+	out := &monitorv1.OpenTelemetryConfig{}
+	out.SetEndpoint(src.Endpoint)
+	headers := make([]*monitorv1.Headers, 0, len(src.Headers))
 	for _, h := range src.Headers {
-		out.Headers = append(out.Headers, apiHeader(h))
+		header := &monitorv1.Headers{}
+		header.SetKey(h.Key)
+		header.SetValue(h.Value)
+		headers = append(headers, header)
+	}
+	if len(headers) > 0 {
+		out.SetHeaders(headers)
 	}
 	return out, diags
 }
 
-func openTelemetryFromAPI(_ context.Context, api *apiOpenTelemetry) (types.Object, diag.Diagnostics) {
+func openTelemetryFromAPI(_ context.Context, api *monitorv1.OpenTelemetryConfig) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if api == nil {
 		return types.ObjectNull(openTelemetryObjTypes), diags
 	}
-	headerObjs := make([]attr.Value, 0, len(api.Headers))
-	for _, h := range api.Headers {
+	headerObjs := make([]attr.Value, 0, len(api.GetHeaders()))
+	for _, h := range api.GetHeaders() {
 		hObj, d := types.ObjectValue(openTelemetryHeaderObjTypes, map[string]attr.Value{
-			"key":   types.StringValue(h.Key),
-			"value": types.StringValue(h.Value),
+			"key":   types.StringValue(h.GetKey()),
+			"value": types.StringValue(h.GetValue()),
 		})
 		diags.Append(d...)
 		headerObjs = append(headerObjs, hObj)
@@ -102,7 +101,7 @@ func openTelemetryFromAPI(_ context.Context, api *apiOpenTelemetry) (types.Objec
 	headersList, d := types.ListValue(types.ObjectType{AttrTypes: openTelemetryHeaderObjTypes}, headerObjs)
 	diags.Append(d...)
 	obj, d := types.ObjectValue(openTelemetryObjTypes, map[string]attr.Value{
-		"endpoint": types.StringValue(api.Endpoint),
+		"endpoint": types.StringValue(api.GetEndpoint()),
 		"headers":  headersList,
 	})
 	diags.Append(d...)

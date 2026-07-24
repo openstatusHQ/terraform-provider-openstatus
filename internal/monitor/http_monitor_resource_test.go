@@ -2,77 +2,85 @@ package monitor
 
 import (
 	"context"
-	"encoding/json"
 	"testing"
+
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func TestHTTPMonitorAPIObject_BoolFalseNotOmitted(t *testing.T) {
-	obj := httpMonitorAPIObject{
-		Name:            "test",
-		URL:             "https://example.com",
-		Periodicity:     "PERIODICITY_1M",
-		FollowRedirects: false,
-		Active:          false,
-		Public:          false,
+func httpMonitorWithHeaders(headers ...*monitorv1.Headers) *monitorv1.HTTPMonitor {
+	m := &monitorv1.HTTPMonitor{}
+	m.SetHeaders(headers)
+	return m
+}
+
+func header(key, value string) *monitorv1.Headers {
+	h := &monitorv1.Headers{}
+	h.SetKey(key)
+	h.SetValue(value)
+	return h
+}
+
+// follow_redirects and degraded_at are proto-optional, so presence is the
+// provider's responsibility rather than a JSON encoding detail.
+func TestHTTPModelToAPI_OptionalFieldPresence(t *testing.T) {
+	data := httpMonitorModel{
+		Name:            types.StringValue("m"),
+		URL:             types.StringValue("https://example.com"),
+		Periodicity:     types.StringValue("1m"),
+		Method:          types.StringValue("GET"),
+		FollowRedirects: types.BoolValue(false),
+		DegradedAt:      types.Int64Value(0),
 	}
 
-	data, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
+	got, diags := httpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
 
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+	if !got.HasFollowRedirects() {
+		t.Error("follow_redirects must be present even when false, otherwise the server keeps its own default")
+	}
+	if got.GetFollowRedirects() {
+		t.Error("follow_redirects = true, want false")
+	}
+	if got.HasDegradedAt() {
+		t.Error("degraded_at must stay absent when zero, matching the previous omitempty behaviour")
 	}
 
-	for _, field := range []string{"followRedirects", "active", "public"} {
-		val, ok := raw[field]
-		if !ok {
-			t.Errorf("field %q omitted from JSON when false — omitempty must be removed", field)
-			continue
-		}
-		if val != false {
-			t.Errorf("field %q = %v, want false", field, val)
-		}
+	data.DegradedAt = types.Int64Value(30000)
+	got, diags = httpModelToAPI(context.Background(), data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+	if !got.HasDegradedAt() || got.GetDegradedAt() != 30000 {
+		t.Errorf("degraded_at = %d (present=%v), want 30000 present", got.GetDegradedAt(), got.HasDegradedAt())
 	}
 }
 
-func TestHTTPMonitorAPIObject_ClearableScalarsNotOmitted(t *testing.T) {
-	obj := httpMonitorAPIObject{
-		Name:        "m",
-		URL:         "https://example.com",
-		Periodicity: "PERIODICITY_1M",
-		Body:        "",
-		Description: "",
-		Timeout:     0,
-		Retry:       0,
+func TestHTTPModelToAPI_RejectsUnknownEnums(t *testing.T) {
+	_, diags := httpModelToAPI(context.Background(), httpMonitorModel{
+		Periodicity: types.StringValue("7m"),
+	})
+	if !diags.HasError() {
+		t.Error("expected an error for an unknown periodicity")
 	}
-	b, err := json.Marshal(obj)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]json.RawMessage
-	if err := json.Unmarshal(b, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	for _, field := range []string{"body", "description", "timeout", "retry"} {
-		if _, ok := raw[field]; !ok {
-			t.Errorf("field %q omitted from JSON when zero — omitempty must be removed", field)
-		}
+
+	_, diags = httpModelToAPI(context.Background(), httpMonitorModel{
+		Periodicity: types.StringValue("1m"),
+		Method:      types.StringValue("BREW"),
+	})
+	if !diags.HasError() {
+		t.Error("expected an error for an unknown method")
 	}
 }
 
 func TestHTTPAPIToModel_DropsEmptyPlaceholderHeader(t *testing.T) {
-	api := httpMonitorAPIObject{
-		Headers: []apiHeader{{Key: "", Value: ""}},
-	}
 	var data httpMonitorModel
 	data.Headers = types.ListNull(types.ObjectType{AttrTypes: headerObjTypes})
 
-	diags := httpAPIToModel(context.Background(), api, &data)
+	diags := httpAPIToModel(context.Background(), httpMonitorWithHeaders(header("", "")), &data)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -85,53 +93,29 @@ func TestHTTPAPIToModel_DropsEmptyPlaceholderHeader(t *testing.T) {
 }
 
 func TestHTTPAPIToModel_KeepsRealHeaders(t *testing.T) {
-	api := httpMonitorAPIObject{
-		Headers: []apiHeader{{Key: "X-Api-Key", Value: "secret"}},
-	}
 	var data httpMonitorModel
 
-	diags := httpAPIToModel(context.Background(), api, &data)
+	diags := httpAPIToModel(context.Background(), httpMonitorWithHeaders(header("X-Api-Key", "secret")), &data)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
-	}
-	if data.Headers.IsNull() {
-		t.Fatal("Headers is null, want one-element list")
 	}
 	elems := data.Headers.Elements()
 	if len(elems) != 1 {
 		t.Fatalf("Headers length = %d, want 1", len(elems))
 	}
-	obj, ok := elems[0].(types.Object)
-	if !ok {
-		t.Fatalf("element is %T, want types.Object", elems[0])
+	attrs := elems[0].(types.Object).Attributes()
+	if got := attrs["key"].(types.String).ValueString(); got != "X-Api-Key" {
+		t.Errorf("key = %q, want X-Api-Key", got)
 	}
-	attrs := obj.Attributes()
-	key, ok := attrs["key"].(types.String)
-	if !ok {
-		t.Fatalf("key is %T, want types.String", attrs["key"])
-	}
-	if got := key.ValueString(); got != "X-Api-Key" {
-		t.Errorf("key = %q, want %q", got, "X-Api-Key")
-	}
-	value, ok := attrs["value"].(types.String)
-	if !ok {
-		t.Fatalf("value is %T, want types.String", attrs["value"])
-	}
-	if got := value.ValueString(); got != "secret" {
-		t.Errorf("value = %q, want %q", got, "secret")
+	if got := attrs["value"].(types.String).ValueString(); got != "secret" {
+		t.Errorf("value = %q, want secret", got)
 	}
 }
 
 func TestHTTPAPIToModel_KeepsRealHeadersAlongsidePlaceholder(t *testing.T) {
-	api := httpMonitorAPIObject{
-		Headers: []apiHeader{
-			{Key: "", Value: ""},
-			{Key: "X", Value: "Y"},
-			{Key: "", Value: ""},
-		},
-	}
 	var data httpMonitorModel
 
+	api := httpMonitorWithHeaders(header("", ""), header("X", "Y"), header("", ""))
 	diags := httpAPIToModel(context.Background(), api, &data)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
@@ -140,24 +124,12 @@ func TestHTTPAPIToModel_KeepsRealHeadersAlongsidePlaceholder(t *testing.T) {
 	if len(elems) != 1 {
 		t.Fatalf("Headers length = %d, want 1 (placeholders dropped)", len(elems))
 	}
-	obj, ok := elems[0].(types.Object)
-	if !ok {
-		t.Fatalf("element is %T, want types.Object", elems[0])
+	attrs := elems[0].(types.Object).Attributes()
+	if got := attrs["key"].(types.String).ValueString(); got != "X" {
+		t.Errorf("key = %q, want X", got)
 	}
-	attrs := obj.Attributes()
-	key, ok := attrs["key"].(types.String)
-	if !ok {
-		t.Fatalf("key is %T, want types.String", attrs["key"])
-	}
-	if got := key.ValueString(); got != "X" {
-		t.Errorf("key = %q, want %q", got, "X")
-	}
-	value, ok := attrs["value"].(types.String)
-	if !ok {
-		t.Fatalf("value is %T, want types.String", attrs["value"])
-	}
-	if got := value.ValueString(); got != "Y" {
-		t.Errorf("value = %q, want %q", got, "Y")
+	if got := attrs["value"].(types.String).ValueString(); got != "Y" {
+		t.Errorf("value = %q, want Y", got)
 	}
 }
 
@@ -166,10 +138,9 @@ func TestHTTPAPIToModel_HeaderListShapeMatchesGetForAbsentBlock(t *testing.T) {
 	// mapper should produce an empty (non-null) list — matching the shape
 	// Get() produces for an absent ListNestedBlock. Guards #19 from
 	// regressing if someone "optimizes" the filter back to a null branch.
-	api := httpMonitorAPIObject{Headers: nil}
 	var data httpMonitorModel
 
-	diags := httpAPIToModel(context.Background(), api, &data)
+	diags := httpAPIToModel(context.Background(), &monitorv1.HTTPMonitor{}, &data)
 	if diags.HasError() {
 		t.Fatalf("unexpected diags: %v", diags)
 	}
@@ -181,22 +152,69 @@ func TestHTTPAPIToModel_HeaderListShapeMatchesGetForAbsentBlock(t *testing.T) {
 	}
 }
 
-func TestGetMonitorResponse_NestedMonitorWrapper(t *testing.T) {
-	// Simulates the actual API v2 response format
-	apiJSON := `{"monitor":{"http":{"name":"Hub UI","url":"https://hub.traefik.io","followRedirects":false}}}`
+func TestHTTPAPIToModel_RoundTripsAssertions(t *testing.T) {
+	statusAssertion := &monitorv1.StatusCodeAssertion{}
+	statusAssertion.SetTarget(200)
+	statusAssertion.SetComparator(monitorv1.NumberComparator_NUMBER_COMPARATOR_EQUAL)
 
-	var resp getMonitorResponse
-	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
+	bodyAssertion := &monitorv1.BodyAssertion{}
+	bodyAssertion.SetTarget("ok")
+	bodyAssertion.SetComparator(monitorv1.StringComparator_STRING_COMPARATOR_CONTAINS)
+
+	headerAssertion := &monitorv1.HeaderAssertion{}
+	headerAssertion.SetKey("X-Cache")
+	headerAssertion.SetTarget("HIT")
+	headerAssertion.SetComparator(monitorv1.StringComparator_STRING_COMPARATOR_EQUAL)
+
+	api := &monitorv1.HTTPMonitor{}
+	api.SetStatusCodeAssertions([]*monitorv1.StatusCodeAssertion{statusAssertion})
+	api.SetBodyAssertions([]*monitorv1.BodyAssertion{bodyAssertion})
+	api.SetHeaderAssertions([]*monitorv1.HeaderAssertion{headerAssertion})
+
+	var data httpMonitorModel
+	diags := httpAPIToModel(context.Background(), api, &data)
+	if diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
 	}
 
-	if resp.Monitor.HTTP == nil {
-		t.Fatal("expected monitor.http to be parsed, got nil")
+	status := data.StatusCodeAssertions.Elements()[0].(types.Object).Attributes()
+	if got := status["target"].(types.Int64).ValueInt64(); got != 200 {
+		t.Errorf("status target = %d, want 200", got)
 	}
-	if resp.Monitor.HTTP.Name != "Hub UI" {
-		t.Errorf("name = %q, want %q", resp.Monitor.HTTP.Name, "Hub UI")
+	if got := status["comparator"].(types.String).ValueString(); got != "eq" {
+		t.Errorf("status comparator = %q, want eq", got)
 	}
-	if resp.Monitor.HTTP.FollowRedirects != false {
-		t.Error("followRedirects = true, want false")
+
+	body := data.BodyAssertions.Elements()[0].(types.Object).Attributes()
+	if got := body["comparator"].(types.String).ValueString(); got != "contains" {
+		t.Errorf("body comparator = %q, want contains", got)
+	}
+
+	head := data.HeaderAssertions.Elements()[0].(types.Object).Attributes()
+	if got := head["key"].(types.String).ValueString(); got != "X-Cache" {
+		t.Errorf("header key = %q, want X-Cache", got)
+	}
+}
+
+func TestMonitorConfigOneof(t *testing.T) {
+	httpMonitor := &monitorv1.HTTPMonitor{}
+	httpMonitor.SetName("Hub UI")
+	httpMonitor.SetUrl("https://hub.traefik.io")
+	httpMonitor.SetFollowRedirects(false)
+
+	config := &monitorv1.MonitorConfig{}
+	config.SetHttp(httpMonitor)
+
+	if config.GetHttp() == nil {
+		t.Fatal("expected the http arm to be set")
+	}
+	if config.GetTcp() != nil || config.GetDns() != nil {
+		t.Error("only one arm of the oneof may be set")
+	}
+	if config.GetHttp().GetName() != "Hub UI" {
+		t.Errorf("name = %q, want Hub UI", config.GetHttp().GetName())
+	}
+	if config.GetHttp().GetFollowRedirects() {
+		t.Error("follow_redirects = true, want false")
 	}
 }
