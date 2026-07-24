@@ -56,6 +56,7 @@ resource "openstatus_dns_monitor" "main" {
 ### Read-Only
 
 - `id` (String) The ID of this resource.
+- `private_location_ids` (Set of String) IDs of the private locations that run this monitor. Managed from `openstatus_private_location.monitor_ids`.
 - `status` (String)
 
 <a id="nestedblock--open_telemetry"></a>

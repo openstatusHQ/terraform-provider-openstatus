@@ -41,4 +41,5 @@ Read-Only:
 
 - `id` (String)
 - `name` (String)
+- `private_location_ids` (Set of String)
 - `type` (String)

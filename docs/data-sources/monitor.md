@@ -33,6 +33,7 @@ output "monitor_name" {
 - `method` (String)
 - `name` (String)
 - `periodicity` (String)
+- `private_location_ids` (Set of String) IDs of the private locations that run this monitor.
 - `public` (Boolean)
 - `status` (String)
 - `timeout` (Number)
