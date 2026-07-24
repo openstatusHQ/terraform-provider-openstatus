@@ -40,20 +40,21 @@ type dnsMonitorResource struct {
 }
 
 type dnsMonitorModel struct {
-	ID               types.String `tfsdk:"id"`
-	Name             types.String `tfsdk:"name"`
-	URI              types.String `tfsdk:"uri"`
-	Periodicity      types.String `tfsdk:"periodicity"`
-	Timeout          types.Int64  `tfsdk:"timeout"`
-	DegradedAt       types.Int64  `tfsdk:"degraded_at"`
-	Retry            types.Int64  `tfsdk:"retry"`
-	Active           types.Bool   `tfsdk:"active"`
-	Public           types.Bool   `tfsdk:"public"`
-	Description      types.String `tfsdk:"description"`
-	Regions          types.Set    `tfsdk:"regions"`
-	RecordAssertions types.List   `tfsdk:"record_assertions"`
-	OpenTelemetry    types.Object `tfsdk:"open_telemetry"`
-	Status           types.String `tfsdk:"status"`
+	ID                 types.String `tfsdk:"id"`
+	Name               types.String `tfsdk:"name"`
+	URI                types.String `tfsdk:"uri"`
+	Periodicity        types.String `tfsdk:"periodicity"`
+	Timeout            types.Int64  `tfsdk:"timeout"`
+	DegradedAt         types.Int64  `tfsdk:"degraded_at"`
+	Retry              types.Int64  `tfsdk:"retry"`
+	Active             types.Bool   `tfsdk:"active"`
+	Public             types.Bool   `tfsdk:"public"`
+	Description        types.String `tfsdk:"description"`
+	Regions            types.Set    `tfsdk:"regions"`
+	RecordAssertions   types.List   `tfsdk:"record_assertions"`
+	OpenTelemetry      types.Object `tfsdk:"open_telemetry"`
+	Status             types.String `tfsdk:"status"`
+	PrivateLocationIDs types.Set    `tfsdk:"private_location_ids"`
 }
 
 var recordAssertionObjTypes = map[string]attr.Type{
@@ -136,6 +137,11 @@ func (r *dnsMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"status": schema.StringAttribute{
 				Computed:      true,
 				PlanModifiers: []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"private_location_ids": schema.SetAttribute{
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "IDs of the private locations that run this monitor. Managed from `openstatus_private_location.monitor_ids`.",
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -358,6 +364,10 @@ func dnsAPIToModel(ctx context.Context, api *monitorv1.DNSMonitor, data *dnsMoni
 		data.Description = types.StringValue(api.GetDescription())
 	}
 	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.GetStatus()))
+
+	privateLocationSet, d := types.SetValueFrom(ctx, types.StringType, api.GetPrivateLocationIds())
+	diags.Append(d...)
+	data.PrivateLocationIDs = privateLocationSet
 
 	if len(api.GetRegions()) > 0 {
 		regionVals := MapRegionsFromAPI(api.GetRegions())

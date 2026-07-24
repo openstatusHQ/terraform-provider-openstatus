@@ -7,6 +7,7 @@ import (
 	"terraform-provider-openstatus/internal/client"
 	"terraform-provider-openstatus/internal/monitor"
 	"terraform-provider-openstatus/internal/notification"
+	"terraform-provider-openstatus/internal/privatelocation"
 	"terraform-provider-openstatus/internal/statuspage"
 
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
@@ -33,7 +34,7 @@ type openstatusProviderModel struct {
 
 func (p *openstatusProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "The OpenStatus provider allows you to manage monitors, status pages, and notifications.",
+		MarkdownDescription: "The OpenStatus provider allows you to manage monitors, status pages, notifications, and private locations.",
 		Attributes: map[string]schema.Attribute{
 			"api_token": schema.StringAttribute{
 				MarkdownDescription: "OpenStatus API token. Can also be set via the `OPENSTATUS_API_TOKEN` environment variable.",
@@ -86,6 +87,8 @@ func (p *openstatusProvider) DataSources(_ context.Context) []func() datasource.
 		monitor.NewMonitorsDataSource,
 		statuspage.NewStatusPageDataSource,
 		notification.NewNotificationDataSource,
+		privatelocation.NewPrivateLocationDataSource,
+		privatelocation.NewPrivateLocationsDataSource,
 	}
 }
 
@@ -98,5 +101,6 @@ func (p *openstatusProvider) Resources(_ context.Context) []func() resource.Reso
 		statuspage.NewStatusPageResource,
 		statuspage.NewComponentResource,
 		statuspage.NewComponentGroupResource,
+		privatelocation.NewPrivateLocationResource,
 	}
 }

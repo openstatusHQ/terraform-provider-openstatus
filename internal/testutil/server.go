@@ -9,6 +9,7 @@ import (
 
 	monitorv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/monitor/v1/monitorv1connect"
 	notificationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/notification/v1/notificationv1connect"
+	privatelocationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/private_location/v1/private_locationv1connect"
 	statuspagev1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/status_page/v1/status_pagev1connect"
 
 	"connectrpc.com/connect"
@@ -44,6 +45,7 @@ func NewServer(t *testing.T) (*httptest.Server, *Fake) {
 	mux.Handle(monitorv1connect.NewMonitorServiceHandler(&monitorService{f: fake}, opts))
 	mux.Handle(notificationv1connect.NewNotificationServiceHandler(&notificationService{f: fake}, opts))
 	mux.Handle(statuspagev1connect.NewStatusPageServiceHandler(&statusPageService{f: fake}, opts))
+	mux.Handle(privatelocationv1connect.NewPrivateLocationServiceHandler(&privateLocationService{f: fake}, opts))
 
 	server := httptest.NewServer(mux)
 	t.Cleanup(server.Close)

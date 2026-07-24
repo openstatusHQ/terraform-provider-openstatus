@@ -7,12 +7,14 @@ import (
 	"sort"
 	"sync"
 
-	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
-	notificationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/notification/v1"
-	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 	monitorv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/monitor/v1/monitorv1connect"
 	notificationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/notification/v1/notificationv1connect"
+	privatelocationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/private_location/v1/private_locationv1connect"
 	statuspagev1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/status_page/v1/status_pagev1connect"
+	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
+	notificationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/notification/v1"
+	privatelocationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/private_location/v1"
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 
 	"connectrpc.com/connect"
 )
@@ -25,24 +27,26 @@ type Fake struct {
 	mu  sync.Mutex
 	seq int
 
-	httpMonitors  map[string]*monitorv1.HTTPMonitor
-	tcpMonitors   map[string]*monitorv1.TCPMonitor
-	dnsMonitors   map[string]*monitorv1.DNSMonitor
-	notifications map[string]*notificationv1.Notification
-	statusPages   map[string]*statuspagev1.StatusPage
-	components    map[string]*statuspagev1.PageComponent
-	groups        map[string]*statuspagev1.PageComponentGroup
+	httpMonitors     map[string]*monitorv1.HTTPMonitor
+	tcpMonitors      map[string]*monitorv1.TCPMonitor
+	dnsMonitors      map[string]*monitorv1.DNSMonitor
+	notifications    map[string]*notificationv1.Notification
+	statusPages      map[string]*statuspagev1.StatusPage
+	components       map[string]*statuspagev1.PageComponent
+	groups           map[string]*statuspagev1.PageComponentGroup
+	privateLocations map[string]*privatelocationv1.PrivateLocation
 }
 
 func NewFake() *Fake {
 	return &Fake{
-		httpMonitors:  map[string]*monitorv1.HTTPMonitor{},
-		tcpMonitors:   map[string]*monitorv1.TCPMonitor{},
-		dnsMonitors:   map[string]*monitorv1.DNSMonitor{},
-		notifications: map[string]*notificationv1.Notification{},
-		statusPages:   map[string]*statuspagev1.StatusPage{},
-		components:    map[string]*statuspagev1.PageComponent{},
-		groups:        map[string]*statuspagev1.PageComponentGroup{},
+		httpMonitors:     map[string]*monitorv1.HTTPMonitor{},
+		tcpMonitors:      map[string]*monitorv1.TCPMonitor{},
+		dnsMonitors:      map[string]*monitorv1.DNSMonitor{},
+		notifications:    map[string]*notificationv1.Notification{},
+		statusPages:      map[string]*statuspagev1.StatusPage{},
+		components:       map[string]*statuspagev1.PageComponent{},
+		groups:           map[string]*statuspagev1.PageComponentGroup{},
+		privateLocations: map[string]*privatelocationv1.PrivateLocation{},
 	}
 }
 
@@ -634,5 +638,108 @@ func (s *statusPageService) GetStatusPageContent(_ context.Context, req *connect
 	resp.SetStatusPage(p)
 	resp.SetComponents(components)
 	resp.SetGroups(groups)
+	return connect.NewResponse(resp), nil
+}
+
+type privateLocationService struct {
+	privatelocationv1connect.UnimplementedPrivateLocationServiceHandler
+	f *Fake
+}
+
+func (s *privateLocationService) CreatePrivateLocation(_ context.Context, req *connect.Request[privatelocationv1.CreatePrivateLocationRequest]) (*connect.Response[privatelocationv1.CreatePrivateLocationResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	l := &privatelocationv1.PrivateLocation{}
+	l.SetId(s.f.nextID("pl"))
+	l.SetName(req.Msg.GetName())
+	l.SetToken("tk_" + l.GetId())
+	l.SetMonitorIds(req.Msg.GetMonitorIds())
+	l.SetMetadata(req.Msg.GetMetadata())
+	l.SetStatus(privatelocationv1.PrivateLocationStatus_PRIVATE_LOCATION_STATUS_ACTIVE)
+	l.SetCreatedAt(fixedTimestamp)
+	l.SetUpdatedAt(fixedTimestamp)
+	s.f.privateLocations[l.GetId()] = l
+
+	resp := &privatelocationv1.CreatePrivateLocationResponse{}
+	resp.SetPrivateLocation(l)
+	return connect.NewResponse(resp), nil
+}
+
+func (s *privateLocationService) GetPrivateLocation(_ context.Context, req *connect.Request[privatelocationv1.GetPrivateLocationRequest]) (*connect.Response[privatelocationv1.GetPrivateLocationResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	l, ok := s.f.privateLocations[req.Msg.GetId()]
+	if !ok {
+		return nil, notFound("private location", req.Msg.GetId())
+	}
+
+	resp := &privatelocationv1.GetPrivateLocationResponse{}
+	resp.SetPrivateLocation(l)
+	return connect.NewResponse(resp), nil
+}
+
+func (s *privateLocationService) ListPrivateLocations(_ context.Context, _ *connect.Request[privatelocationv1.ListPrivateLocationsRequest]) (*connect.Response[privatelocationv1.ListPrivateLocationsResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	summaries := make([]*privatelocationv1.PrivateLocationSummary, 0, len(s.f.privateLocations))
+	for _, l := range s.f.privateLocations {
+		// The list endpoint deliberately omits the agent token.
+		summary := &privatelocationv1.PrivateLocationSummary{}
+		summary.SetId(l.GetId())
+		summary.SetName(l.GetName())
+		summary.SetMonitorCount(int32(len(l.GetMonitorIds())))
+		summary.SetMetadata(l.GetMetadata())
+		summary.SetStatus(l.GetStatus())
+		summary.SetLastSeenAt(l.GetLastSeenAt())
+		summary.SetCreatedAt(l.GetCreatedAt())
+		summary.SetUpdatedAt(l.GetUpdatedAt())
+		summaries = append(summaries, summary)
+	}
+	sort.Slice(summaries, func(i, j int) bool { return summaries[i].GetId() < summaries[j].GetId() })
+
+	resp := &privatelocationv1.ListPrivateLocationsResponse{}
+	resp.SetPrivateLocations(summaries)
+	resp.SetTotalSize(int32(len(summaries)))
+	return connect.NewResponse(resp), nil
+}
+
+func (s *privateLocationService) UpdatePrivateLocation(_ context.Context, req *connect.Request[privatelocationv1.UpdatePrivateLocationRequest]) (*connect.Response[privatelocationv1.UpdatePrivateLocationResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	l, ok := s.f.privateLocations[req.Msg.GetId()]
+	if !ok {
+		return nil, notFound("private location", req.Msg.GetId())
+	}
+	if req.Msg.HasName() {
+		l.SetName(req.Msg.GetName())
+	}
+	// monitor_ids and metadata only apply when their sentinel is set.
+	if req.Msg.GetUpdateMonitorIds() {
+		l.SetMonitorIds(req.Msg.GetMonitorIds())
+	}
+	if req.Msg.GetUpdateMetadata() {
+		l.SetMetadata(req.Msg.GetMetadata())
+	}
+
+	resp := &privatelocationv1.UpdatePrivateLocationResponse{}
+	resp.SetPrivateLocation(l)
+	return connect.NewResponse(resp), nil
+}
+
+func (s *privateLocationService) DeletePrivateLocation(_ context.Context, req *connect.Request[privatelocationv1.DeletePrivateLocationRequest]) (*connect.Response[privatelocationv1.DeletePrivateLocationResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	if _, ok := s.f.privateLocations[req.Msg.GetId()]; !ok {
+		return nil, notFound("private location", req.Msg.GetId())
+	}
+	delete(s.f.privateLocations, req.Msg.GetId())
+
+	resp := &privatelocationv1.DeletePrivateLocationResponse{}
+	resp.SetSuccess(true)
 	return connect.NewResponse(resp), nil
 }

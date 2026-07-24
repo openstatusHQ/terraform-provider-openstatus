@@ -61,6 +61,7 @@ type httpMonitorModel struct {
 	HeaderAssertions     types.List   `tfsdk:"header_assertions"`
 	OpenTelemetry        types.Object `tfsdk:"open_telemetry"`
 	Status               types.String `tfsdk:"status"`
+	PrivateLocationIDs   types.Set    `tfsdk:"private_location_ids"`
 }
 
 func (r *httpMonitorResource) Metadata(_ context.Context, req resource.MetadataRequest, resp *resource.MetadataResponse) {
@@ -187,6 +188,11 @@ func (r *httpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Computed:            true,
 				MarkdownDescription: "Current monitor status.",
 				PlanModifiers:       []planmodifier.String{stringplanmodifier.UseStateForUnknown()},
+			},
+			"private_location_ids": schema.SetAttribute{
+				Computed:            true,
+				ElementType:         types.StringType,
+				MarkdownDescription: "IDs of the private locations that run this monitor. Managed from `openstatus_private_location.monitor_ids`.",
 			},
 		},
 		Blocks: map[string]schema.Block{
@@ -518,6 +524,10 @@ func httpAPIToModel(ctx context.Context, api *monitorv1.HTTPMonitor, data *httpM
 		data.Description = types.StringValue(api.GetDescription())
 	}
 	data.Status = types.StringValue(MapMonitorStatusFromAPI(api.GetStatus()))
+
+	privateLocationSet, d := types.SetValueFrom(ctx, types.StringType, api.GetPrivateLocationIds())
+	diags.Append(d...)
+	data.PrivateLocationIDs = privateLocationSet
 
 	if len(api.GetRegions()) > 0 {
 		regionVals := MapRegionsFromAPI(api.GetRegions())
