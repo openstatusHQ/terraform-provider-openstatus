@@ -78,6 +78,7 @@ resource "openstatus_http_monitor" "api" {
 ### Read-Only
 
 - `id` (String) Monitor identifier.
+- `private_location_ids` (Set of String) IDs of the private locations that run this monitor. Managed from `openstatus_private_location.monitor_ids`.
 - `status` (String) Current monitor status.
 
 <a id="nestedblock--body_assertions"></a>
