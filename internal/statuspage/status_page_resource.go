@@ -7,6 +7,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/listvalidator"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -258,76 +262,6 @@ func (r *statusPageResource) ValidateConfig(ctx context.Context, req resource.Va
 	}
 }
 
-type apiStatusPageCreateRequest struct {
-	Title            string   `json:"title"`
-	Slug             string   `json:"slug"`
-	Description      string   `json:"description,omitempty"`
-	HomepageURL      string   `json:"homepageUrl,omitempty"`
-	ContactURL       string   `json:"contactUrl,omitempty"`
-	Icon             string   `json:"icon,omitempty"`
-	CustomDomain     string   `json:"customDomain,omitempty"`
-	Theme            string   `json:"theme,omitempty"`
-	AccessType       string   `json:"accessType,omitempty"`
-	Password         string   `json:"password,omitempty"`
-	AuthEmailDomains []string `json:"authEmailDomains,omitempty"`
-	AllowedIPRanges  string   `json:"allowedIpRanges,omitempty"`
-	DefaultLocale    string   `json:"defaultLocale,omitempty"`
-	Locales          []string `json:"locales,omitempty"`
-	AllowIndex       *bool    `json:"allowIndex,omitempty"`
-
-	CustomTheme *apiCustomTheme `json:"customTheme,omitempty"`
-}
-
-type apiStatusPageUpdateRequest struct {
-	ID               string    `json:"id"`
-	Title            *string   `json:"title,omitempty"`
-	Slug             *string   `json:"slug,omitempty"`
-	Description      *string   `json:"description,omitempty"`
-	HomepageURL      *string   `json:"homepageUrl,omitempty"`
-	ContactURL       *string   `json:"contactUrl,omitempty"`
-	Icon             *string   `json:"icon,omitempty"`
-	CustomDomain     *string   `json:"customDomain,omitempty"`
-	AccessType       *string   `json:"accessType,omitempty"`
-	Password         *string   `json:"password,omitempty"`
-	AuthEmailDomains *[]string `json:"authEmailDomains,omitempty"`
-	AllowedIPRanges  *string   `json:"allowedIpRanges,omitempty"`
-	Theme            *string   `json:"theme,omitempty"`
-	DefaultLocale    *string   `json:"defaultLocale,omitempty"`
-	Locales          *[]string `json:"locales,omitempty"`
-	AllowIndex       *bool     `json:"allowIndex,omitempty"`
-
-	// Omitted = keep current value; empty message = clear.
-	CustomTheme *apiCustomTheme `json:"customTheme,omitempty"`
-}
-
-type apiStatusPageResponse struct {
-	StatusPage apiStatusPage `json:"statusPage"`
-}
-
-type apiStatusPage struct {
-	ID               string   `json:"id"`
-	Title            string   `json:"title"`
-	Slug             string   `json:"slug"`
-	Description      string   `json:"description"`
-	HomepageURL      string   `json:"homepageUrl"`
-	ContactURL       string   `json:"contactUrl"`
-	Icon             string   `json:"icon"`
-	CustomDomain     string   `json:"customDomain"`
-	Published        bool     `json:"published"`
-	AccessType       string   `json:"accessType"`
-	Password         string   `json:"password"`
-	AuthEmailDomains []string `json:"authEmailDomains"`
-	AllowedIPRanges  string   `json:"allowedIpRanges"`
-	Theme            string   `json:"theme"`
-	DefaultLocale    string   `json:"defaultLocale"`
-	Locales          []string `json:"locales"`
-	AllowIndex       bool     `json:"allowIndex"`
-	CreatedAt        string   `json:"createdAt"`
-	UpdatedAt        string   `json:"updatedAt"`
-
-	CustomTheme *apiCustomTheme `json:"customTheme"`
-}
-
 func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data statusPageModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -335,19 +269,41 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		return
 	}
 
-	apiReq := apiStatusPageCreateRequest{
-		Title:           data.Title.ValueString(),
-		Slug:            data.Slug.ValueString(),
-		Description:     data.Description.ValueString(),
-		HomepageURL:     data.HomepageURL.ValueString(),
-		ContactURL:      data.ContactURL.ValueString(),
-		Icon:            data.Icon.ValueString(),
-		CustomDomain:    data.CustomDomain.ValueString(),
-		AccessType:      accessTypeToProto(data.AccessType.ValueString()),
-		Password:        data.Password.ValueString(),
-		AllowedIPRanges: data.AllowedIPRanges.ValueString(),
-		Theme:           themeToProto(data.Theme.ValueString()),
-		DefaultLocale:   localeToProto(data.DefaultLocale.ValueString()),
+	// Optional fields stay absent when empty. Sending an explicit zero here
+	// would tell the server "set this to unspecified" rather than "use the
+	// default", which for access_type and theme is a different outcome.
+	apiReq := &statuspagev1.CreateStatusPageRequest{}
+	apiReq.SetTitle(data.Title.ValueString())
+	apiReq.SetSlug(data.Slug.ValueString())
+	if v := data.Description.ValueString(); v != "" {
+		apiReq.SetDescription(v)
+	}
+	if v := data.HomepageURL.ValueString(); v != "" {
+		apiReq.SetHomepageUrl(v)
+	}
+	if v := data.ContactURL.ValueString(); v != "" {
+		apiReq.SetContactUrl(v)
+	}
+	if v := data.Icon.ValueString(); v != "" {
+		apiReq.SetIcon(v)
+	}
+	if v := data.CustomDomain.ValueString(); v != "" {
+		apiReq.SetCustomDomain(v)
+	}
+	if v := accessTypeToProto(data.AccessType.ValueString()); v != statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_UNSPECIFIED {
+		apiReq.SetAccessType(v)
+	}
+	if v := data.Password.ValueString(); v != "" {
+		apiReq.SetPassword(v)
+	}
+	if v := data.AllowedIPRanges.ValueString(); v != "" {
+		apiReq.SetAllowedIpRanges(v)
+	}
+	if v := themeToProto(data.Theme.ValueString()); v != statuspagev1.PageTheme_PAGE_THEME_UNSPECIFIED {
+		apiReq.SetTheme(v)
+	}
+	if v := localeToProto(data.DefaultLocale.ValueString()); v != statuspagev1.Locale_LOCALE_UNSPECIFIED {
+		apiReq.SetDefaultLocale(v)
 	}
 
 	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
@@ -356,7 +312,7 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		apiReq.AuthEmailDomains = domains
+		apiReq.SetAuthEmailDomains(domains)
 	}
 
 	if !data.Locales.IsNull() && !data.Locales.IsUnknown() {
@@ -365,42 +321,43 @@ func (r *statusPageResource) Create(ctx context.Context, req resource.CreateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		apiLocales := make([]string, 0, len(tfLocales))
+		apiLocales := make([]statuspagev1.Locale, 0, len(tfLocales))
 		for _, l := range tfLocales {
 			apiLocales = append(apiLocales, localeToProto(l))
 		}
-		apiReq.Locales = apiLocales
+		apiReq.SetLocales(apiLocales)
 	}
 
 	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
-		v := data.AllowIndex.ValueBool()
-		apiReq.AllowIndex = &v
+		apiReq.SetAllowIndex(data.AllowIndex.ValueBool())
 	}
 
-	apiReq.CustomTheme = customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics)
+	if theme := customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics); theme != nil {
+		apiReq.SetCustomTheme(theme)
+	}
 	if resp.Diagnostics.HasError() {
 		return
 	}
 
-	var apiResp apiStatusPageResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateStatusPage", apiReq, &apiResp)
+	createResp, err := r.client.StatusPage.CreateStatusPage(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating status page", err.Error())
 		return
 	}
 
-	pageID := apiResp.StatusPage.ID
+	pageID := createResp.Msg.GetStatusPage().GetId()
 	data.ID = types.StringValue(pageID)
 
 	// Read back full state.
-	err = r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": pageID}, &apiResp)
+	getReq := &statuspagev1.GetStatusPageRequest{}
+	getReq.SetId(pageID)
+	getResp, err := r.client.StatusPage.GetStatusPage(ctx, connect.NewRequest(getReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page after create", err.Error())
 		return
 	}
 
-	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, getResp.Msg.GetStatusPage(), &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -411,11 +368,12 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	var apiResp apiStatusPageResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &statuspagev1.GetStatusPageRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := r.client.StatusPage.GetStatusPage(ctx, connect.NewRequest(getReq))
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -423,7 +381,7 @@ func (r *statusPageResource) Read(ctx context.Context, req resource.ReadRequest,
 		return
 	}
 
-	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, apiResp.Msg.GetStatusPage(), &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -443,26 +401,23 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 	icon := data.Icon.ValueString()
 	customDomain := data.CustomDomain.ValueString()
 
-	updateReq := apiStatusPageUpdateRequest{
-		ID:           data.ID.ValueString(),
-		Title:        &title,
-		Slug:         &slug,
-		Description:  &desc,
-		HomepageURL:  &homepageURL,
-		ContactURL:   &contactURL,
-		Icon:         &icon,
-		CustomDomain: &customDomain,
-	}
+	updateReq := &statuspagev1.UpdateStatusPageRequest{}
+	updateReq.SetId(data.ID.ValueString())
+	updateReq.SetTitle(title)
+	updateReq.SetSlug(slug)
+	updateReq.SetDescription(desc)
+	updateReq.SetHomepageUrl(homepageURL)
+	updateReq.SetContactUrl(contactURL)
+	updateReq.SetIcon(icon)
+	updateReq.SetCustomDomain(customDomain)
 
 	// Password has a min_len=1 validation server-side, only send when set.
 	if !data.Password.IsNull() && !data.Password.IsUnknown() {
-		v := data.Password.ValueString()
-		updateReq.Password = &v
+		updateReq.SetPassword(data.Password.ValueString())
 	}
 
 	if !data.AccessType.IsNull() && !data.AccessType.IsUnknown() {
-		v := accessTypeToProto(data.AccessType.ValueString())
-		updateReq.AccessType = &v
+		updateReq.SetAccessType(accessTypeToProto(data.AccessType.ValueString()))
 	}
 	if !data.AuthEmailDomains.IsNull() && !data.AuthEmailDomains.IsUnknown() {
 		var domains []string
@@ -470,19 +425,16 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		updateReq.AuthEmailDomains = &domains
+		updateReq.SetAuthEmailDomains(domains)
 	}
 	if !data.AllowedIPRanges.IsNull() && !data.AllowedIPRanges.IsUnknown() {
-		v := data.AllowedIPRanges.ValueString()
-		updateReq.AllowedIPRanges = &v
+		updateReq.SetAllowedIpRanges(data.AllowedIPRanges.ValueString())
 	}
 	if !data.Theme.IsNull() && !data.Theme.IsUnknown() {
-		v := themeToProto(data.Theme.ValueString())
-		updateReq.Theme = &v
+		updateReq.SetTheme(themeToProto(data.Theme.ValueString()))
 	}
 	if !data.DefaultLocale.IsNull() && !data.DefaultLocale.IsUnknown() {
-		v := localeToProto(data.DefaultLocale.ValueString())
-		updateReq.DefaultLocale = &v
+		updateReq.SetDefaultLocale(localeToProto(data.DefaultLocale.ValueString()))
 	}
 	if !data.Locales.IsNull() && !data.Locales.IsUnknown() {
 		var tfLocales []string
@@ -490,19 +442,20 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 		if resp.Diagnostics.HasError() {
 			return
 		}
-		apiLocales := make([]string, 0, len(tfLocales))
+		apiLocales := make([]statuspagev1.Locale, 0, len(tfLocales))
 		for _, l := range tfLocales {
 			apiLocales = append(apiLocales, localeToProto(l))
 		}
-		updateReq.Locales = &apiLocales
+		updateReq.SetLocales(apiLocales)
 	}
 	if !data.AllowIndex.IsNull() && !data.AllowIndex.IsUnknown() {
-		v := data.AllowIndex.ValueBool()
-		updateReq.AllowIndex = &v
+		updateReq.SetAllowIndex(data.AllowIndex.ValueBool())
 	}
 
 	if !data.CustomTheme.IsNull() && !data.CustomTheme.IsUnknown() {
-		updateReq.CustomTheme = customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics)
+		if theme := customThemeToAPI(ctx, data.CustomTheme, &resp.Diagnostics); theme != nil {
+			updateReq.SetCustomTheme(theme)
+		}
 		if resp.Diagnostics.HasError() {
 			return
 		}
@@ -515,18 +468,17 @@ func (r *statusPageResource) Update(ctx context.Context, req resource.UpdateRequ
 			return
 		}
 		if !state.CustomTheme.IsNull() {
-			updateReq.CustomTheme = &apiCustomTheme{}
+			updateReq.SetCustomTheme(&statuspagev1.CustomTheme{})
 		}
 	}
 
-	var apiResp apiStatusPageResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/UpdateStatusPage", updateReq, &apiResp)
+	apiResp, err := r.client.StatusPage.UpdateStatusPage(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating status page", err.Error())
 		return
 	}
 
-	statusPageAPIToModel(ctx, apiResp.StatusPage, &data, &resp.Diagnostics)
+	statusPageAPIToModel(ctx, apiResp.Msg.GetStatusPage(), &data, &resp.Diagnostics)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -537,9 +489,11 @@ func (r *statusPageResource) Delete(ctx context.Context, req resource.DeleteRequ
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/DeleteStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &statuspagev1.DeleteStatusPageRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.StatusPage.DeleteStatusPage(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting status page", err.Error())
 	}
 }
@@ -548,139 +502,139 @@ func (r *statusPageResource) ImportState(ctx context.Context, req resource.Impor
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(req.ID))...)
 }
 
-func accessTypeToProto(tf string) string {
+func accessTypeToProto(tf string) statuspagev1.PageAccessType {
 	switch tf {
 	case "public":
-		return "PAGE_ACCESS_TYPE_PUBLIC"
+		return statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_PUBLIC
 	case "password":
-		return "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED"
+		return statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_PASSWORD_PROTECTED
 	case "email-domain":
-		return "PAGE_ACCESS_TYPE_AUTHENTICATED"
+		return statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_AUTHENTICATED
 	case "ip":
-		return "PAGE_ACCESS_TYPE_IP_RESTRICTED"
+		return statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_IP_RESTRICTED
 	}
-	return ""
+	return statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_UNSPECIFIED
 }
 
-func accessTypeFromProto(proto string) (string, bool) {
+func accessTypeFromProto(proto statuspagev1.PageAccessType) (string, bool) {
 	switch proto {
-	case "PAGE_ACCESS_TYPE_PUBLIC":
+	case statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_PUBLIC:
 		return "public", true
-	case "PAGE_ACCESS_TYPE_PASSWORD_PROTECTED":
+	case statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_PASSWORD_PROTECTED:
 		return "password", true
-	case "PAGE_ACCESS_TYPE_AUTHENTICATED":
+	case statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_AUTHENTICATED:
 		return "email-domain", true
-	case "PAGE_ACCESS_TYPE_IP_RESTRICTED":
+	case statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_IP_RESTRICTED:
 		return "ip", true
 	}
 	return "", false
 }
 
-func themeToProto(tf string) string {
+func themeToProto(tf string) statuspagev1.PageTheme {
 	switch tf {
 	case "system":
-		return "PAGE_THEME_SYSTEM"
+		return statuspagev1.PageTheme_PAGE_THEME_SYSTEM
 	case "light":
-		return "PAGE_THEME_LIGHT"
+		return statuspagev1.PageTheme_PAGE_THEME_LIGHT
 	case "dark":
-		return "PAGE_THEME_DARK"
+		return statuspagev1.PageTheme_PAGE_THEME_DARK
 	}
-	return ""
+	return statuspagev1.PageTheme_PAGE_THEME_UNSPECIFIED
 }
 
-func themeFromProto(proto string) (string, bool) {
+func themeFromProto(proto statuspagev1.PageTheme) (string, bool) {
 	switch proto {
-	case "PAGE_THEME_SYSTEM":
+	case statuspagev1.PageTheme_PAGE_THEME_SYSTEM:
 		return "system", true
-	case "PAGE_THEME_LIGHT":
+	case statuspagev1.PageTheme_PAGE_THEME_LIGHT:
 		return "light", true
-	case "PAGE_THEME_DARK":
+	case statuspagev1.PageTheme_PAGE_THEME_DARK:
 		return "dark", true
 	}
 	return "", false
 }
 
-func localeToProto(tf string) string {
+func localeToProto(tf string) statuspagev1.Locale {
 	switch tf {
 	case "en":
-		return "LOCALE_EN"
+		return statuspagev1.Locale_LOCALE_EN
 	case "fr":
-		return "LOCALE_FR"
+		return statuspagev1.Locale_LOCALE_FR
 	case "de":
-		return "LOCALE_DE"
+		return statuspagev1.Locale_LOCALE_DE
 	}
-	return ""
+	return statuspagev1.Locale_LOCALE_UNSPECIFIED
 }
 
-func localeFromProto(proto string) (string, bool) {
+func localeFromProto(proto statuspagev1.Locale) (string, bool) {
 	switch proto {
-	case "LOCALE_EN":
+	case statuspagev1.Locale_LOCALE_EN:
 		return "en", true
-	case "LOCALE_FR":
+	case statuspagev1.Locale_LOCALE_FR:
 		return "fr", true
-	case "LOCALE_DE":
+	case statuspagev1.Locale_LOCALE_DE:
 		return "de", true
 	}
 	return "", false
 }
 
 // statusPageAPIToModel maps an API response to the Terraform model.
-func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPageModel, diags *diag.Diagnostics) {
-	data.ID = types.StringValue(api.ID)
-	data.Title = types.StringValue(api.Title)
-	data.Slug = types.StringValue(api.Slug)
-	if api.Description != "" || !data.Description.IsNull() {
-		data.Description = types.StringValue(api.Description)
+func statusPageAPIToModel(ctx context.Context, api *statuspagev1.StatusPage, data *statusPageModel, diags *diag.Diagnostics) {
+	data.ID = types.StringValue(api.GetId())
+	data.Title = types.StringValue(api.GetTitle())
+	data.Slug = types.StringValue(api.GetSlug())
+	if api.GetDescription() != "" || !data.Description.IsNull() {
+		data.Description = types.StringValue(api.GetDescription())
 	}
-	if api.HomepageURL != "" || !data.HomepageURL.IsNull() {
-		data.HomepageURL = types.StringValue(api.HomepageURL)
+	if api.GetHomepageUrl() != "" || !data.HomepageURL.IsNull() {
+		data.HomepageURL = types.StringValue(api.GetHomepageUrl())
 	}
-	if api.ContactURL != "" || !data.ContactURL.IsNull() {
-		data.ContactURL = types.StringValue(api.ContactURL)
+	if api.GetContactUrl() != "" || !data.ContactURL.IsNull() {
+		data.ContactURL = types.StringValue(api.GetContactUrl())
 	}
-	if api.Icon != "" || !data.Icon.IsNull() {
-		data.Icon = types.StringValue(api.Icon)
+	if api.GetIcon() != "" || !data.Icon.IsNull() {
+		data.Icon = types.StringValue(api.GetIcon())
 	}
-	if api.CustomDomain != "" || !data.CustomDomain.IsNull() {
-		data.CustomDomain = types.StringValue(api.CustomDomain)
+	if api.GetCustomDomain() != "" || !data.CustomDomain.IsNull() {
+		data.CustomDomain = types.StringValue(api.GetCustomDomain())
 	}
-	data.Published = types.BoolValue(api.Published)
-	if v, ok := accessTypeFromProto(api.AccessType); ok {
+	data.Published = types.BoolValue(api.GetPublished())
+	if v, ok := accessTypeFromProto(api.GetAccessType()); ok {
 		data.AccessType = types.StringValue(v)
-	} else if api.AccessType != "" {
+	} else if api.GetAccessType() != statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_UNSPECIFIED {
 		diags.AddWarning(
 			"Unknown status page access type",
-			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.AccessType),
+			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.GetAccessType()),
 		)
 	}
-	if api.Password != "" {
-		data.Password = types.StringValue(api.Password)
+	if api.GetPassword() != "" {
+		data.Password = types.StringValue(api.GetPassword())
 	}
-	if len(api.AuthEmailDomains) > 0 || !data.AuthEmailDomains.IsNull() {
-		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
+	if len(api.GetAuthEmailDomains()) > 0 || !data.AuthEmailDomains.IsNull() {
+		list, listDiags := types.ListValueFrom(ctx, types.StringType, api.GetAuthEmailDomains())
 		diags.Append(listDiags...)
 		data.AuthEmailDomains = list
 	}
-	if v, ok := themeFromProto(api.Theme); ok {
+	if v, ok := themeFromProto(api.GetTheme()); ok {
 		data.Theme = types.StringValue(v)
-	} else if api.Theme != "" {
+	} else if api.GetTheme() != statuspagev1.PageTheme_PAGE_THEME_UNSPECIFIED {
 		diags.AddWarning(
 			"Unknown status page theme",
-			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
+			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.GetTheme()),
 		)
 	}
-	data.CustomTheme = customThemeFromAPI(ctx, api.CustomTheme, diags)
-	if v, ok := localeFromProto(api.DefaultLocale); ok {
+	data.CustomTheme = customThemeFromAPI(ctx, api.GetCustomTheme(), diags)
+	if v, ok := localeFromProto(api.GetDefaultLocale()); ok {
 		data.DefaultLocale = types.StringValue(v)
-	} else if api.DefaultLocale != "" {
+	} else if api.GetDefaultLocale() != statuspagev1.Locale_LOCALE_UNSPECIFIED {
 		diags.AddWarning(
 			"Unknown status page default locale",
-			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.DefaultLocale),
+			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.GetDefaultLocale()),
 		)
 	}
-	if len(api.Locales) > 0 || !data.Locales.IsNull() {
-		tfLocales := make([]string, 0, len(api.Locales))
-		for _, l := range api.Locales {
+	if len(api.GetLocales()) > 0 || !data.Locales.IsNull() {
+		tfLocales := make([]string, 0, len(api.GetLocales()))
+		for _, l := range api.GetLocales() {
 			if v, ok := localeFromProto(l); ok {
 				tfLocales = append(tfLocales, v)
 			} else {
@@ -694,17 +648,10 @@ func statusPageAPIToModel(ctx context.Context, api apiStatusPage, data *statusPa
 		diags.Append(listDiags...)
 		data.Locales = list
 	}
-	data.AllowIndex = types.BoolValue(api.AllowIndex)
-	if api.AllowedIPRanges != "" || !data.AllowedIPRanges.IsNull() {
-		data.AllowedIPRanges = types.StringValue(api.AllowedIPRanges)
+	data.AllowIndex = types.BoolValue(api.GetAllowIndex())
+	if api.GetAllowedIpRanges() != "" || !data.AllowedIPRanges.IsNull() {
+		data.AllowedIPRanges = types.StringValue(api.GetAllowedIpRanges())
 	}
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
-}
-
-func isNotFound(err error) bool {
-	if apiErr, ok := err.(*client.APIError); ok {
-		return apiErr.Code == "not_found"
-	}
-	return false
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 }

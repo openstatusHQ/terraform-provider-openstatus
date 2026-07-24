@@ -6,6 +6,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
@@ -100,55 +104,56 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 		return
 	}
 
-	var apiResp apiStatusPageResponse
-	err := d.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPage",
-		map[string]string{"id": data.ID.ValueString()}, &apiResp)
+	getReq := &statuspagev1.GetStatusPageRequest{}
+	getReq.SetId(data.ID.ValueString())
+
+	apiResp, err := d.client.StatusPage.GetStatusPage(ctx, connect.NewRequest(getReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error reading status page", err.Error())
 		return
 	}
 
-	api := apiResp.StatusPage
-	data.ID = types.StringValue(api.ID)
-	data.Title = types.StringValue(api.Title)
-	data.Slug = types.StringValue(api.Slug)
-	data.Description = types.StringValue(api.Description)
-	data.HomepageURL = types.StringValue(api.HomepageURL)
-	data.ContactURL = types.StringValue(api.ContactURL)
-	data.Icon = types.StringValue(api.Icon)
-	data.CustomDomain = types.StringValue(api.CustomDomain)
-	data.Published = types.BoolValue(api.Published)
-	if v, ok := accessTypeFromProto(api.AccessType); ok {
+	api := apiResp.Msg.GetStatusPage()
+	data.ID = types.StringValue(api.GetId())
+	data.Title = types.StringValue(api.GetTitle())
+	data.Slug = types.StringValue(api.GetSlug())
+	data.Description = types.StringValue(api.GetDescription())
+	data.HomepageURL = types.StringValue(api.GetHomepageUrl())
+	data.ContactURL = types.StringValue(api.GetContactUrl())
+	data.Icon = types.StringValue(api.GetIcon())
+	data.CustomDomain = types.StringValue(api.GetCustomDomain())
+	data.Published = types.BoolValue(api.GetPublished())
+	if v, ok := accessTypeFromProto(api.GetAccessType()); ok {
 		data.AccessType = types.StringValue(v)
-	} else if api.AccessType != "" {
+	} else if api.GetAccessType() != statuspagev1.PageAccessType_PAGE_ACCESS_TYPE_UNSPECIFIED {
 		resp.Diagnostics.AddWarning(
 			"Unknown status page access type",
-			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.AccessType),
+			fmt.Sprintf("OpenStatus returned access_type %q which this provider version does not recognize.", api.GetAccessType()),
 		)
 	}
-	data.Password = types.StringValue(api.Password)
-	list, listDiags := types.ListValueFrom(ctx, types.StringType, api.AuthEmailDomains)
+	data.Password = types.StringValue(api.GetPassword())
+	list, listDiags := types.ListValueFrom(ctx, types.StringType, api.GetAuthEmailDomains())
 	resp.Diagnostics.Append(listDiags...)
 	data.AuthEmailDomains = list
-	if v, ok := themeFromProto(api.Theme); ok {
+	if v, ok := themeFromProto(api.GetTheme()); ok {
 		data.Theme = types.StringValue(v)
-	} else if api.Theme != "" {
+	} else if api.GetTheme() != statuspagev1.PageTheme_PAGE_THEME_UNSPECIFIED {
 		resp.Diagnostics.AddWarning(
 			"Unknown status page theme",
-			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.Theme),
+			fmt.Sprintf("OpenStatus returned theme %q which this provider version does not recognize.", api.GetTheme()),
 		)
 	}
-	data.CustomTheme = customThemeFromAPI(ctx, api.CustomTheme, &resp.Diagnostics)
-	if v, ok := localeFromProto(api.DefaultLocale); ok {
+	data.CustomTheme = customThemeFromAPI(ctx, api.GetCustomTheme(), &resp.Diagnostics)
+	if v, ok := localeFromProto(api.GetDefaultLocale()); ok {
 		data.DefaultLocale = types.StringValue(v)
-	} else if api.DefaultLocale != "" {
+	} else if api.GetDefaultLocale() != statuspagev1.Locale_LOCALE_UNSPECIFIED {
 		resp.Diagnostics.AddWarning(
 			"Unknown status page default locale",
-			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.DefaultLocale),
+			fmt.Sprintf("OpenStatus returned default_locale %q which this provider version does not recognize.", api.GetDefaultLocale()),
 		)
 	}
-	tfLocales := make([]string, 0, len(api.Locales))
-	for _, l := range api.Locales {
+	tfLocales := make([]string, 0, len(api.GetLocales()))
+	for _, l := range api.GetLocales() {
 		if v, ok := localeFromProto(l); ok {
 			tfLocales = append(tfLocales, v)
 		} else {
@@ -161,10 +166,10 @@ func (d *statusPageDataSource) Read(ctx context.Context, req datasource.ReadRequ
 	localesList, localesDiags := types.ListValueFrom(ctx, types.StringType, tfLocales)
 	resp.Diagnostics.Append(localesDiags...)
 	data.Locales = localesList
-	data.AllowIndex = types.BoolValue(api.AllowIndex)
-	data.AllowedIPRanges = types.StringValue(api.AllowedIPRanges)
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
+	data.AllowIndex = types.BoolValue(api.GetAllowIndex())
+	data.AllowedIPRanges = types.StringValue(api.GetAllowedIpRanges())
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }

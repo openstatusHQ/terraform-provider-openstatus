@@ -1,271 +1,108 @@
 package statuspage
 
 import (
-	"encoding/json"
 	"testing"
+
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 
 	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
-func ptr[T any](v T) *T { return &v }
+func monitorComponent(order, groupOrder int32) *statuspagev1.PageComponent {
+	c := &statuspagev1.PageComponent{}
+	c.SetId("1")
+	c.SetPageId("2")
+	c.SetName("Acme API")
+	c.SetType(statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_MONITOR)
+	c.SetMonitorId("42")
+	c.SetGroupId("10")
+	c.SetOrder(order)
+	c.SetGroupOrder(groupOrder)
+	c.SetCreatedAt("2026-03-23T00:00:00Z")
+	c.SetUpdatedAt("2026-03-23T00:00:00Z")
+	return c
+}
 
-func TestAPIAddMonitorComponentRequest_IncludesGroupOrder(t *testing.T) {
-	req := apiAddMonitorComponentRequest{
-		PageID:     "1",
-		MonitorID:  "42",
-		Name:       "Hub UI",
-		Order:      ptr(int64(0)),
-		GroupID:    "10",
-		GroupOrder: ptr(int64(3)),
+func TestAddMonitorComponentRequest_SetsOrderOnlyWhenKnown(t *testing.T) {
+	req := &statuspagev1.AddMonitorComponentRequest{}
+	req.SetPageId("2")
+	req.SetMonitorId("42")
+	if req.HasOrder() {
+		t.Error("order must be absent until explicitly set")
 	}
 
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
+	req.SetOrder(3)
+	if !req.HasOrder() {
+		t.Fatal("order must be present once set")
 	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	val, ok := raw["groupOrder"]
-	if !ok {
-		t.Fatal("groupOrder field missing from JSON")
-	}
-	if val != float64(3) {
-		t.Errorf("groupOrder = %v, want 3", val)
+	if req.GetOrder() != 3 {
+		t.Errorf("order = %d, want 3", req.GetOrder())
 	}
 }
 
-func TestAPIAddMonitorComponentRequest_OmitsNilGroupOrder(t *testing.T) {
-	req := apiAddMonitorComponentRequest{
-		PageID:    "1",
-		MonitorID: "42",
-		Name:      "Hub UI",
+func TestUpdateComponentRequest_PresenceReflectsWhatWasSet(t *testing.T) {
+	req := &statuspagev1.UpdateComponentRequest{}
+	req.SetId("abc")
+
+	for name, has := range map[string]bool{
+		"name":        req.HasName(),
+		"description": req.HasDescription(),
+		"order":       req.HasOrder(),
+		"group_id":    req.HasGroupId(),
+		"group_order": req.HasGroupOrder(),
+	} {
+		if has {
+			t.Errorf("%s must be absent when not set, otherwise update clobbers it", name)
+		}
 	}
 
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
+	req.SetOrder(0)
+	if !req.HasOrder() {
+		t.Fatal("order must be present after being set to zero")
+	}
+	if req.GetOrder() != 0 {
+		t.Errorf("order = %d, want 0", req.GetOrder())
 	}
 
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	if _, ok := raw["groupOrder"]; ok {
-		t.Error("groupOrder should be omitted when nil")
-	}
-	if _, ok := raw["order"]; ok {
-		t.Error("order should be omitted when nil")
-	}
-}
-
-func TestAPIAddStaticComponentRequest_IncludesGroupOrder(t *testing.T) {
-	req := apiAddStaticComponentRequest{
-		PageID:     "1",
-		Name:       "Static",
-		Order:      ptr(int64(1)),
-		GroupID:    "10",
-		GroupOrder: ptr(int64(2)),
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	val, ok := raw["groupOrder"]
-	if !ok {
-		t.Fatal("groupOrder field missing from JSON")
-	}
-	if val != float64(2) {
-		t.Errorf("groupOrder = %v, want 2", val)
-	}
-}
-
-func TestAPIComponent_GroupOrderParsed(t *testing.T) {
-	apiJSON := `{
-		"id": "1",
-		"pageId": "2",
-		"name": "Hub UI",
-		"description": "",
-		"type": "PAGE_COMPONENT_TYPE_MONITOR",
-		"monitorId": "42",
-		"order": 0,
-		"groupId": "10",
-		"groupOrder": 3,
-		"createdAt": "2026-03-23T00:00:00Z",
-		"updatedAt": "2026-03-23T00:00:00Z"
-	}`
-
-	var comp apiComponent
-	if err := json.Unmarshal([]byte(apiJSON), &comp); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	if comp.GroupOrder == nil || *comp.GroupOrder != 3 {
-		t.Errorf("GroupOrder = %v, want 3", comp.GroupOrder)
-	}
-	if comp.Order == nil || *comp.Order != 0 {
-		t.Errorf("Order = %v, want 0", comp.Order)
-	}
-}
-
-func TestAPIUpdateComponentRequest_IncludesGroupOrder(t *testing.T) {
-	req := apiUpdateComponentRequest{
-		ID:         "1",
-		GroupOrder: ptr(int64(5)),
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	val, ok := raw["groupOrder"]
-	if !ok {
-		t.Fatal("groupOrder field missing from JSON")
-	}
-	if val != float64(5) {
-		t.Errorf("groupOrder = %v, want 5", val)
-	}
-}
-
-func TestAPIUpdateComponentRequest_OmitsNilGroupOrder(t *testing.T) {
-	req := apiUpdateComponentRequest{
-		ID: "1",
-	}
-
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("unexpected marshal error: %v", err)
-	}
-
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unexpected unmarshal error: %v", err)
-	}
-
-	if _, ok := raw["groupOrder"]; ok {
-		t.Error("groupOrder should be omitted when nil")
+	req.SetGroupOrder(7)
+	if !req.HasGroupOrder() || req.GetGroupOrder() != 7 {
+		t.Errorf("group_order = %d (present=%v), want 7 present", req.GetGroupOrder(), req.HasGroupOrder())
 	}
 }
 
 func TestComponentAPIToModel_SetsGroupOrder(t *testing.T) {
-	api := apiComponent{
-		ID:         "1",
-		PageID:     "2",
-		Name:       "Acme API",
-		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
-		MonitorID:  "42",
-		Order:      ptr(int64(0)),
-		GroupID:    "10",
-		GroupOrder: ptr(int64(3)),
-		CreatedAt:  "2026-03-23T00:00:00Z",
-		UpdatedAt:  "2026-03-23T00:00:00Z",
-	}
-
 	var data componentModel
-	componentAPIToModel(api, &data)
+	componentAPIToModel(monitorComponent(0, 3), &data)
 
 	if data.GroupOrder.ValueInt64() != 3 {
 		t.Errorf("GroupOrder = %d, want 3", data.GroupOrder.ValueInt64())
 	}
-	if data.Order.ValueInt64() != 0 {
-		t.Errorf("Order = %d, want 0", data.Order.ValueInt64())
+	if !data.Order.IsNull() {
+		t.Errorf("Order = %v, want null (zero is indistinguishable from absent on the wire)", data.Order)
 	}
 }
 
-func TestComponentAPIToModel_PreservesOrderWhenAPIOmitsFields(t *testing.T) {
-	api := apiComponent{
-		ID:        "1",
-		PageID:    "2",
-		Name:      "Acme API",
-		Type:      "PAGE_COMPONENT_TYPE_MONITOR",
-		MonitorID: "42",
-		GroupID:   "10",
-		CreatedAt: "2026-03-23T00:00:00Z",
-		UpdatedAt: "2026-03-23T00:00:00Z",
-		// Order and GroupOrder are nil (omitted by API)
-	}
-
+func TestComponentAPIToModel_PreservesOrderWhenAPIReportsZero(t *testing.T) {
 	data := componentModel{
 		Order:      types.Int64Value(1),
 		GroupOrder: types.Int64Value(3),
 	}
-
-	componentAPIToModel(api, &data)
+	componentAPIToModel(monitorComponent(0, 0), &data)
 
 	if data.GroupOrder.ValueInt64() != 3 {
-		t.Errorf("GroupOrder = %d, want 3 (should be preserved when API omits field)", data.GroupOrder.ValueInt64())
+		t.Errorf("GroupOrder = %d, want 3 (preserved when API reports zero)", data.GroupOrder.ValueInt64())
 	}
 	if data.Order.ValueInt64() != 1 {
-		t.Errorf("Order = %d, want 1 (should be preserved when API omits field)", data.Order.ValueInt64())
-	}
-}
-
-func TestComponentAPIToModel_SetsExplicitZero(t *testing.T) {
-	api := apiComponent{
-		ID:         "1",
-		PageID:     "2",
-		Name:       "Acme API",
-		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
-		MonitorID:  "42",
-		Order:      ptr(int64(0)),
-		GroupID:    "10",
-		GroupOrder: ptr(int64(0)),
-		CreatedAt:  "2026-03-23T00:00:00Z",
-		UpdatedAt:  "2026-03-23T00:00:00Z",
-	}
-
-	data := componentModel{
-		Order:      types.Int64Value(1),
-		GroupOrder: types.Int64Value(3),
-	}
-
-	componentAPIToModel(api, &data)
-
-	if data.GroupOrder.ValueInt64() != 0 {
-		t.Errorf("GroupOrder = %d, want 0 (explicit zero from API)", data.GroupOrder.ValueInt64())
-	}
-	if data.Order.ValueInt64() != 0 {
-		t.Errorf("Order = %d, want 0 (explicit zero from API)", data.Order.ValueInt64())
+		t.Errorf("Order = %d, want 1 (preserved when API reports zero)", data.Order.ValueInt64())
 	}
 }
 
 func TestComponentAPIToModel_OverwritesGroupOrderWhenAPIReturnsNonZero(t *testing.T) {
-	api := apiComponent{
-		ID:         "1",
-		PageID:     "2",
-		Name:       "Acme API",
-		Type:       "PAGE_COMPONENT_TYPE_MONITOR",
-		MonitorID:  "42",
-		Order:      ptr(int64(5)),
-		GroupID:    "10",
-		GroupOrder: ptr(int64(7)),
-		CreatedAt:  "2026-03-23T00:00:00Z",
-		UpdatedAt:  "2026-03-23T00:00:00Z",
-	}
-
 	data := componentModel{
 		Order:      types.Int64Value(1),
 		GroupOrder: types.Int64Value(3),
 	}
-
-	componentAPIToModel(api, &data)
+	componentAPIToModel(monitorComponent(5, 7), &data)
 
 	if data.GroupOrder.ValueInt64() != 7 {
 		t.Errorf("GroupOrder = %d, want 7", data.GroupOrder.ValueInt64())
@@ -275,28 +112,33 @@ func TestComponentAPIToModel_OverwritesGroupOrderWhenAPIReturnsNonZero(t *testin
 	}
 }
 
-func TestComponentAPIToModel_CollapsesUnknownToNullWhenAPIOmitsFields(t *testing.T) {
-	api := apiComponent{
-		ID:        "1",
-		PageID:    "2",
-		Name:      "Acme",
-		Type:      "PAGE_COMPONENT_TYPE_MONITOR",
-		MonitorID: "42",
-		CreatedAt: "2026-03-23T00:00:00Z",
-		UpdatedAt: "2026-03-23T00:00:00Z",
-	}
-
+func TestComponentAPIToModel_CollapsesUnknownToNullWhenAPIReportsZero(t *testing.T) {
 	data := componentModel{
 		Order:      types.Int64Unknown(),
 		GroupOrder: types.Int64Unknown(),
 	}
-
-	componentAPIToModel(api, &data)
+	componentAPIToModel(monitorComponent(0, 0), &data)
 
 	if !data.GroupOrder.IsNull() {
 		t.Errorf("GroupOrder = %v, want Null", data.GroupOrder)
 	}
 	if !data.Order.IsNull() {
 		t.Errorf("Order = %v, want Null", data.Order)
+	}
+}
+
+func TestComponentAPIToModel_MapsType(t *testing.T) {
+	var monitorData componentModel
+	componentAPIToModel(monitorComponent(1, 1), &monitorData)
+	if monitorData.Type.ValueString() != "monitor" {
+		t.Errorf("Type = %q, want monitor", monitorData.Type.ValueString())
+	}
+
+	static := monitorComponent(1, 1)
+	static.SetType(statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_STATIC)
+	var staticData componentModel
+	componentAPIToModel(static, &staticData)
+	if staticData.Type.ValueString() != "static" {
+		t.Errorf("Type = %q, want static", staticData.Type.ValueString())
 	}
 }

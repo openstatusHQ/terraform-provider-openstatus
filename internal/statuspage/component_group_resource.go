@@ -6,6 +6,10 @@ import (
 
 	"terraform-provider-openstatus/internal/client"
 
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
+
+	"connectrpc.com/connect"
+
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
@@ -79,31 +83,6 @@ func (r *componentGroupResource) Schema(_ context.Context, _ resource.SchemaRequ
 	}
 }
 
-type apiComponentGroup struct {
-	ID          string `json:"id"`
-	PageID      string `json:"pageId"`
-	Name        string `json:"name"`
-	DefaultOpen bool   `json:"defaultOpen"`
-	CreatedAt   string `json:"createdAt"`
-	UpdatedAt   string `json:"updatedAt"`
-}
-
-type apiCreateComponentGroupRequest struct {
-	PageID      string `json:"pageId"`
-	Name        string `json:"name"`
-	DefaultOpen bool   `json:"defaultOpen"`
-}
-
-type apiUpdateComponentGroupRequest struct {
-	ID          string  `json:"id"`
-	Name        *string `json:"name,omitempty"`
-	DefaultOpen *bool   `json:"defaultOpen,omitempty"`
-}
-
-type apiComponentGroupResponse struct {
-	Group apiComponentGroup `json:"group"`
-}
-
 func (r *componentGroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	var data componentGroupModel
 	resp.Diagnostics.Append(req.Plan.Get(ctx, &data)...)
@@ -111,20 +90,18 @@ func (r *componentGroupResource) Create(ctx context.Context, req resource.Create
 		return
 	}
 
-	apiReq := apiCreateComponentGroupRequest{
-		PageID:      data.PageID.ValueString(),
-		Name:        data.Name.ValueString(),
-		DefaultOpen: data.DefaultOpen.ValueBool(),
-	}
+	apiReq := &statuspagev1.CreateComponentGroupRequest{}
+	apiReq.SetPageId(data.PageID.ValueString())
+	apiReq.SetName(data.Name.ValueString())
+	apiReq.SetDefaultOpen(data.DefaultOpen.ValueBool())
 
-	var apiResp apiComponentGroupResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/CreateComponentGroup", apiReq, &apiResp)
+	apiResp, err := r.client.StatusPage.CreateComponentGroup(ctx, connect.NewRequest(apiReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error creating component group", err.Error())
 		return
 	}
 
-	componentGroupAPIToModel(apiResp.Group, &data)
+	componentGroupAPIToModel(apiResp.Msg.GetGroup(), &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -137,7 +114,7 @@ func (r *componentGroupResource) Read(ctx context.Context, req resource.ReadRequ
 
 	group, err := r.findGroup(ctx, data.PageID.ValueString(), data.ID.ValueString())
 	if err != nil {
-		if isNotFound(err) {
+		if client.IsNotFound(err) {
 			resp.State.RemoveResource(ctx)
 			return
 		}
@@ -149,7 +126,7 @@ func (r *componentGroupResource) Read(ctx context.Context, req resource.ReadRequ
 		return
 	}
 
-	componentGroupAPIToModel(*group, &data)
+	componentGroupAPIToModel(group, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -166,22 +143,18 @@ func (r *componentGroupResource) Update(ctx context.Context, req resource.Update
 		return
 	}
 
-	name := data.Name.ValueString()
-	defaultOpen := data.DefaultOpen.ValueBool()
-	updateReq := apiUpdateComponentGroupRequest{
-		ID:          state.ID.ValueString(),
-		Name:        &name,
-		DefaultOpen: &defaultOpen,
-	}
+	updateReq := &statuspagev1.UpdateComponentGroupRequest{}
+	updateReq.SetId(state.ID.ValueString())
+	updateReq.SetName(data.Name.ValueString())
+	updateReq.SetDefaultOpen(data.DefaultOpen.ValueBool())
 
-	var apiResp apiComponentGroupResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/UpdateComponentGroup", updateReq, &apiResp)
+	apiResp, err := r.client.StatusPage.UpdateComponentGroup(ctx, connect.NewRequest(updateReq))
 	if err != nil {
 		resp.Diagnostics.AddError("Error updating component group", err.Error())
 		return
 	}
 
-	componentGroupAPIToModel(apiResp.Group, &data)
+	componentGroupAPIToModel(apiResp.Msg.GetGroup(), &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
 }
 
@@ -192,9 +165,11 @@ func (r *componentGroupResource) Delete(ctx context.Context, req resource.Delete
 		return
 	}
 
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/DeleteComponentGroup",
-		map[string]string{"id": data.ID.ValueString()}, nil)
-	if err != nil && !isNotFound(err) {
+	deleteReq := &statuspagev1.DeleteComponentGroupRequest{}
+	deleteReq.SetId(data.ID.ValueString())
+
+	_, err := r.client.StatusPage.DeleteComponentGroup(ctx, connect.NewRequest(deleteReq))
+	if err != nil && !client.IsNotFound(err) {
 		resp.Diagnostics.AddError("Error deleting component group", err.Error())
 	}
 }
@@ -209,26 +184,27 @@ func (r *componentGroupResource) ImportState(ctx context.Context, req resource.I
 	resp.Diagnostics.Append(resp.State.SetAttribute(ctx, path.Root("id"), types.StringValue(parts[1]))...)
 }
 
-func (r *componentGroupResource) findGroup(ctx context.Context, pageID, groupID string) (*apiComponentGroup, error) {
-	var contentResp apiStatusPageContentResponse
-	err := r.client.Do(ctx, "/openstatus.status_page.v1.StatusPageService/GetStatusPageContent",
-		map[string]string{"id": pageID}, &contentResp)
+func (r *componentGroupResource) findGroup(ctx context.Context, pageID, groupID string) (*statuspagev1.PageComponentGroup, error) {
+	contentReq := &statuspagev1.GetStatusPageContentRequest{}
+	contentReq.SetId(pageID)
+
+	contentResp, err := r.client.StatusPage.GetStatusPageContent(ctx, connect.NewRequest(contentReq))
 	if err != nil {
 		return nil, err
 	}
-	for _, g := range contentResp.Groups {
-		if g.ID == groupID {
-			return &g, nil
+	for _, g := range contentResp.Msg.GetGroups() {
+		if g.GetId() == groupID {
+			return g, nil
 		}
 	}
 	return nil, nil
 }
 
-func componentGroupAPIToModel(api apiComponentGroup, data *componentGroupModel) {
-	data.ID = types.StringValue(api.ID)
-	data.PageID = types.StringValue(api.PageID)
-	data.Name = types.StringValue(api.Name)
-	data.DefaultOpen = types.BoolValue(api.DefaultOpen)
-	data.CreatedAt = types.StringValue(api.CreatedAt)
-	data.UpdatedAt = types.StringValue(api.UpdatedAt)
+func componentGroupAPIToModel(api *statuspagev1.PageComponentGroup, data *componentGroupModel) {
+	data.ID = types.StringValue(api.GetId())
+	data.PageID = types.StringValue(api.GetPageId())
+	data.Name = types.StringValue(api.GetName())
+	data.DefaultOpen = types.BoolValue(api.GetDefaultOpen())
+	data.CreatedAt = types.StringValue(api.GetCreatedAt())
+	data.UpdatedAt = types.StringValue(api.GetUpdatedAt())
 }

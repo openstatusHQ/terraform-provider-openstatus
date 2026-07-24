@@ -7,6 +7,8 @@ import (
 	"sort"
 	"strings"
 
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
+
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -159,13 +161,8 @@ func (v themeVarsValidator) ValidateMap(ctx context.Context, req validator.MapRe
 	}
 }
 
-type apiCustomTheme struct {
-	Light map[string]string `json:"light,omitempty"`
-	Dark  map[string]string `json:"dark,omitempty"`
-}
-
 // Returns nil (field omitted) when the value is null or unknown.
-func customThemeToAPI(ctx context.Context, obj types.Object, diags *diag.Diagnostics) *apiCustomTheme {
+func customThemeToAPI(ctx context.Context, obj types.Object, diags *diag.Diagnostics) *statuspagev1.CustomTheme {
 	if obj.IsNull() || obj.IsUnknown() {
 		return nil
 	}
@@ -176,26 +173,30 @@ func customThemeToAPI(ctx context.Context, obj types.Object, diags *diag.Diagnos
 		return nil
 	}
 
-	api := &apiCustomTheme{}
+	var light, dark map[string]string
 	if !model.Light.IsNull() && !model.Light.IsUnknown() {
-		diags.Append(model.Light.ElementsAs(ctx, &api.Light, false)...)
+		diags.Append(model.Light.ElementsAs(ctx, &light, false)...)
 	}
 	if !model.Dark.IsNull() && !model.Dark.IsUnknown() {
-		diags.Append(model.Dark.ElementsAs(ctx, &api.Dark, false)...)
+		diags.Append(model.Dark.ElementsAs(ctx, &dark, false)...)
 	}
 	if diags.HasError() {
 		return nil
 	}
 	// An empty message means "clear" on update; never emit one for a set config value.
-	if len(api.Light) == 0 && len(api.Dark) == 0 {
+	if len(light) == 0 && len(dark) == 0 {
 		return nil
 	}
+
+	api := &statuspagev1.CustomTheme{}
+	api.SetLight(light)
+	api.SetDark(dark)
 	return api
 }
 
 // An absent or empty message maps to a null object.
-func customThemeFromAPI(ctx context.Context, api *apiCustomTheme, diags *diag.Diagnostics) types.Object {
-	if api == nil || (len(api.Light) == 0 && len(api.Dark) == 0) {
+func customThemeFromAPI(ctx context.Context, api *statuspagev1.CustomTheme, diags *diag.Diagnostics) types.Object {
+	if api == nil || (len(api.GetLight()) == 0 && len(api.GetDark()) == 0) {
 		return types.ObjectNull(customThemeAttrTypes)
 	}
 
@@ -209,8 +210,8 @@ func customThemeFromAPI(ctx context.Context, api *apiCustomTheme, diags *diag.Di
 	}
 
 	obj, objDiags := types.ObjectValue(customThemeAttrTypes, map[string]attr.Value{
-		"light": modeMap(api.Light),
-		"dark":  modeMap(api.Dark),
+		"light": modeMap(api.GetLight()),
+		"dark":  modeMap(api.GetDark()),
 	})
 	diags.Append(objDiags...)
 	return obj

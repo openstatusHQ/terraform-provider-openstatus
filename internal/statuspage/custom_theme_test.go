@@ -2,9 +2,10 @@ package statuspage
 
 import (
 	"context"
-	"encoding/json"
 	"strings"
 	"testing"
+
+	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
@@ -182,19 +183,26 @@ func TestCustomThemeToAPI_LightOnly(t *testing.T) {
 	if api == nil {
 		t.Fatal("api = nil, want value")
 	}
-	if api.Light["--primary"] != "red" {
-		t.Errorf("Light = %v, want {--primary: red}", api.Light)
+	if api.GetLight()["--primary"] != "red" {
+		t.Errorf("Light = %v, want {--primary: red}", api.GetLight())
 	}
-	if api.Dark != nil {
-		t.Errorf("Dark = %v, want nil", api.Dark)
+	if api.GetDark() != nil {
+		t.Errorf("Dark = %v, want nil", api.GetDark())
 	}
 }
 
+func customTheme(light, dark map[string]string) *statuspagev1.CustomTheme {
+	theme := &statuspagev1.CustomTheme{}
+	theme.SetLight(light)
+	theme.SetDark(dark)
+	return theme
+}
+
 func TestCustomThemeFromAPI_RoundTrip(t *testing.T) {
-	in := &apiCustomTheme{
-		Light: map[string]string{"--primary": "hsl(24 94% 50%)"},
-		Dark:  map[string]string{"--primary": "hsl(24 94% 60%)", "--background": "black"},
-	}
+	in := customTheme(
+		map[string]string{"--primary": "hsl(24 94% 50%)"},
+		map[string]string{"--primary": "hsl(24 94% 60%)", "--background": "black"},
+	)
 	var diags diag.Diagnostics
 	obj := customThemeFromAPI(context.Background(), in, &diags)
 	if diags.HasError() {
@@ -204,11 +212,11 @@ func TestCustomThemeFromAPI_RoundTrip(t *testing.T) {
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
-	if out.Light["--primary"] != in.Light["--primary"] {
-		t.Errorf("Light = %v, want %v", out.Light, in.Light)
+	if out.GetLight()["--primary"] != in.GetLight()["--primary"] {
+		t.Errorf("Light = %v, want %v", out.GetLight(), in.GetLight())
 	}
-	if len(out.Dark) != 2 || out.Dark["--background"] != "black" {
-		t.Errorf("Dark = %v, want %v", out.Dark, in.Dark)
+	if len(out.GetDark()) != 2 || out.GetDark()["--background"] != "black" {
+		t.Errorf("Dark = %v, want %v", out.GetDark(), in.GetDark())
 	}
 }
 
@@ -217,10 +225,10 @@ func TestCustomThemeFromAPI_NilAndEmptyAreNull(t *testing.T) {
 	if got := customThemeFromAPI(context.Background(), nil, &diags); !got.IsNull() {
 		t.Errorf("nil api = %v, want null object", got)
 	}
-	if got := customThemeFromAPI(context.Background(), &apiCustomTheme{}, &diags); !got.IsNull() {
+	if got := customThemeFromAPI(context.Background(), &statuspagev1.CustomTheme{}, &diags); !got.IsNull() {
 		t.Errorf("empty api = %v, want null object", got)
 	}
-	if got := customThemeFromAPI(context.Background(), &apiCustomTheme{Light: map[string]string{}, Dark: map[string]string{}}, &diags); !got.IsNull() {
+	if got := customThemeFromAPI(context.Background(), customTheme(map[string]string{}, map[string]string{}), &diags); !got.IsNull() {
 		t.Errorf("empty maps = %v, want null object", got)
 	}
 	if diags.HasError() {
@@ -230,9 +238,7 @@ func TestCustomThemeFromAPI_NilAndEmptyAreNull(t *testing.T) {
 
 func TestCustomThemeFromAPI_UnsetModeIsNull(t *testing.T) {
 	var diags diag.Diagnostics
-	obj := customThemeFromAPI(context.Background(), &apiCustomTheme{
-		Light: map[string]string{"--primary": "red"},
-	}, &diags)
+	obj := customThemeFromAPI(context.Background(), customTheme(map[string]string{"--primary": "red"}, nil), &diags)
 	if diags.HasError() {
 		t.Fatalf("unexpected diagnostics: %v", diags)
 	}
@@ -242,98 +248,53 @@ func TestCustomThemeFromAPI_UnsetModeIsNull(t *testing.T) {
 	}
 }
 
-// --- wire serialization ---
+func TestCreateStatusPageRequest_CustomThemePresence(t *testing.T) {
+	req := &statuspagev1.CreateStatusPageRequest{}
+	req.SetTitle("Test")
+	req.SetSlug("test")
+	if req.HasCustomTheme() {
+		t.Error("custom_theme must be absent until set")
+	}
 
-func TestAPIStatusPageCreateRequest_CustomTheme(t *testing.T) {
-	req := apiStatusPageCreateRequest{
-		Title: "Test",
-		Slug:  "test",
-		CustomTheme: &apiCustomTheme{
-			Light: map[string]string{"--primary": "red"},
-		},
+	req.SetCustomTheme(customTheme(map[string]string{"--primary": "red"}, nil))
+	if !req.HasCustomTheme() {
+		t.Fatal("custom_theme must be present once set")
 	}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+	if req.GetCustomTheme().GetLight()["--primary"] != "red" {
+		t.Errorf("light = %v, want {--primary: red}", req.GetCustomTheme().GetLight())
 	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	theme, ok := raw["customTheme"].(map[string]interface{})
-	if !ok {
-		t.Fatalf("customTheme = %v, want object", raw["customTheme"])
-	}
-	light, ok := theme["light"].(map[string]interface{})
-	if !ok || light["--primary"] != "red" {
-		t.Errorf("customTheme.light = %v, want {--primary: red}", theme["light"])
-	}
-	if _, ok := theme["dark"]; ok {
-		t.Errorf("customTheme.dark should be omitted when empty, got %v", theme["dark"])
+	if len(req.GetCustomTheme().GetDark()) != 0 {
+		t.Errorf("dark = %v, want empty", req.GetCustomTheme().GetDark())
 	}
 }
 
-func TestAPIStatusPageCreateRequest_OmitsNilCustomTheme(t *testing.T) {
-	req := apiStatusPageCreateRequest{Title: "Test", Slug: "test"}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
+// The API treats an omitted custom_theme as "keep" and an empty message as
+// "clear", so presence is what distinguishes the two.
+func TestUpdateStatusPageRequest_EmptyCustomThemeClears(t *testing.T) {
+	keep := &statuspagev1.UpdateStatusPageRequest{}
+	keep.SetId("42")
+	if keep.HasCustomTheme() {
+		t.Error("custom_theme must be absent when not set, otherwise every update clears the theme")
 	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
+
+	clear := &statuspagev1.UpdateStatusPageRequest{}
+	clear.SetId("42")
+	clear.SetCustomTheme(&statuspagev1.CustomTheme{})
+	if !clear.HasCustomTheme() {
+		t.Fatal("an empty custom_theme must still be present in order to clear")
 	}
-	if _, ok := raw["customTheme"]; ok {
-		t.Errorf("customTheme should be omitted when nil, got %v", raw["customTheme"])
+	if len(clear.GetCustomTheme().GetLight()) != 0 || len(clear.GetCustomTheme().GetDark()) != 0 {
+		t.Error("clearing custom_theme must send an empty message")
 	}
 }
-
-func TestAPIStatusPageUpdateRequest_EmptyCustomThemeClears(t *testing.T) {
-	// The API treats an omitted customTheme as "keep" and an empty message as "clear".
-	req := apiStatusPageUpdateRequest{ID: "42", CustomTheme: &apiCustomTheme{}}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	theme, ok := raw["customTheme"].(map[string]interface{})
-	if !ok {
-		t.Fatal("customTheme should be present as an empty object to clear it")
-	}
-	if len(theme) != 0 {
-		t.Errorf("customTheme = %v, want empty object", theme)
-	}
-}
-
-func TestAPIStatusPageUpdateRequest_OmitsNilCustomTheme(t *testing.T) {
-	req := apiStatusPageUpdateRequest{ID: "42"}
-	data, err := json.Marshal(req)
-	if err != nil {
-		t.Fatalf("marshal: %v", err)
-	}
-	var raw map[string]interface{}
-	if err := json.Unmarshal(data, &raw); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	if _, ok := raw["customTheme"]; ok {
-		t.Errorf("customTheme should be omitted when nil, got %v", raw["customTheme"])
-	}
-}
-
-// --- model mapping ---
 
 func TestStatusPageAPIToModel_CustomTheme(t *testing.T) {
-	api := apiStatusPage{
-		ID:    "1",
-		Title: "X",
-		Slug:  "x",
-		CustomTheme: &apiCustomTheme{
-			Dark: map[string]string{"--background": "black"},
-		},
-	}
+	api := &statuspagev1.StatusPage{}
+	api.SetId("1")
+	api.SetTitle("X")
+	api.SetSlug("x")
+	api.SetCustomTheme(customTheme(nil, map[string]string{"--background": "black"}))
+
 	var data statusPageModel
 	var diags diag.Diagnostics
 	statusPageAPIToModel(context.Background(), api, &data, &diags)
@@ -352,36 +313,15 @@ func TestStatusPageAPIToModel_CustomTheme(t *testing.T) {
 }
 
 func TestStatusPageAPIToModel_CustomThemeNullWhenAbsent(t *testing.T) {
-	api := apiStatusPage{ID: "1", Title: "X", Slug: "x"}
+	api := &statuspagev1.StatusPage{}
+	api.SetId("1")
+	api.SetTitle("X")
+	api.SetSlug("x")
+
 	var data statusPageModel
 	var diags diag.Diagnostics
 	statusPageAPIToModel(context.Background(), api, &data, &diags)
 	if !data.CustomTheme.IsNull() {
 		t.Errorf("CustomTheme = %v, want null", data.CustomTheme)
-	}
-}
-
-func TestAPIStatusPage_ParsesCustomThemeResponse(t *testing.T) {
-	apiJSON := `{
-		"statusPage": {
-			"id": "1",
-			"title": "X",
-			"slug": "x",
-			"customTheme": {
-				"light": {"--primary": "hsl(24 94% 50%)"},
-				"dark": {"--primary": "hsl(24 94% 60%)"}
-			}
-		}
-	}`
-	var resp apiStatusPageResponse
-	if err := json.Unmarshal([]byte(apiJSON), &resp); err != nil {
-		t.Fatalf("unmarshal: %v", err)
-	}
-	theme := resp.StatusPage.CustomTheme
-	if theme == nil {
-		t.Fatal("CustomTheme = nil, want value")
-	}
-	if theme.Light["--primary"] != "hsl(24 94% 50%)" || theme.Dark["--primary"] != "hsl(24 94% 60%)" {
-		t.Errorf("CustomTheme = %+v, want light/dark --primary set", theme)
 	}
 }
