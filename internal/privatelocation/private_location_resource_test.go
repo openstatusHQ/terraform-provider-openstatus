@@ -120,6 +120,45 @@ func TestPrivateLocationAPIToModel_EmptyCollectionsAreNull(t *testing.T) {
 	}
 }
 
+// The other half of the shape contract: `monitor_ids = []` and `metadata = {}`
+// must survive the round trip as empty rather than collapsing to null.
+// Terraform compares post-apply state to the plan byte-for-byte for these
+// Optional, non-Computed attributes.
+func TestPrivateLocationAPIToModel_PreservesPlannedEmptyCollections(t *testing.T) {
+	ctx := context.Background()
+	emptySet, _ := types.SetValueFrom(ctx, types.StringType, []string{})
+	emptyMap, _ := types.MapValueFrom(ctx, types.StringType, map[string]string{})
+
+	data := privateLocationModel{MonitorIDs: emptySet, Metadata: emptyMap}
+	if diags := privateLocationAPIToModel(ctx, privateLocation("pl_1", "EU"), &data); diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	if data.MonitorIDs.IsNull() || len(data.MonitorIDs.Elements()) != 0 {
+		t.Errorf("MonitorIDs = %v, want a known empty set", data.MonitorIDs)
+	}
+	if data.Metadata.IsNull() || len(data.Metadata.Elements()) != 0 {
+		t.Errorf("Metadata = %v, want a known empty map", data.Metadata)
+	}
+}
+
+func TestPrivateLocationAPIToModel_UnknownCollectionsCollapseToNull(t *testing.T) {
+	data := privateLocationModel{
+		MonitorIDs: types.SetUnknown(types.StringType),
+		Metadata:   types.MapUnknown(types.StringType),
+	}
+	if diags := privateLocationAPIToModel(context.Background(), privateLocation("pl_1", "EU"), &data); diags.HasError() {
+		t.Fatalf("unexpected diags: %v", diags)
+	}
+
+	if !data.MonitorIDs.IsNull() {
+		t.Errorf("MonitorIDs = %v, want null", data.MonitorIDs)
+	}
+	if !data.Metadata.IsNull() {
+		t.Errorf("Metadata = %v, want null", data.Metadata)
+	}
+}
+
 func TestMapStatusFromAPI(t *testing.T) {
 	cases := map[privatelocationv1.PrivateLocationStatus]string{
 		privatelocationv1.PrivateLocationStatus_PRIVATE_LOCATION_STATUS_ACTIVE:      "active",
