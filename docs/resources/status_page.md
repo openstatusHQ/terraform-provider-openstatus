@@ -66,7 +66,7 @@ resource "openstatus_status_page" "internal" {
 - `description` (String)
 - `homepage_url` (String)
 - `icon` (String) URL of the icon to display on the status page.
-- `locales` (List of String)
+- `locales` (List of String) Locales the status page is available in, in display order. One of: `en`, `fr`, `de`. Each locale may only be listed once; the API stores locales as a set and would silently drop duplicates.
 - `password` (String, Sensitive) Password to protect the status page. Required when `access_type` is `password`.
 - `theme` (String)
 

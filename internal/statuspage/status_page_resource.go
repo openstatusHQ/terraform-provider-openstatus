@@ -176,8 +176,11 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 			"locales": schema.ListAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
+				MarkdownDescription: "Locales the status page is available in, in display order. One of: `en`, `fr`, `de`. " +
+					"Each locale may only be listed once; the API stores locales as a set and would silently drop duplicates.",
 				Validators: []validator.List{
 					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de")),
+					listvalidator.UniqueValues(),
 				},
 			},
 			"allow_index": schema.BoolAttribute{
