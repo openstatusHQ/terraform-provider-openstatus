@@ -153,8 +153,42 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 		return
 	}
 
+	// The create endpoints have no group_order field, and the read-back mapper
+	// keeps a planned value the API never received — so without this follow-up
+	// the value would sit in state, match the config, and never resurface as a
+	// diff. Apply it in the same apply, from the plan rather than from the
+	// create response.
+	if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
+		updated, updateErr := r.setGroupOrder(ctx, component.GetId(), data.GroupOrder.ValueInt64())
+		if updateErr != nil {
+			resp.Diagnostics.AddError(
+				"Error setting group_order",
+				"The component was created but group_order could not be applied: "+updateErr.Error(),
+			)
+			// Save what exists so the component isn't orphaned outside state.
+			componentAPIToModel(component, &data)
+			resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+			return
+		}
+		component = updated
+	}
+
 	componentAPIToModel(component, &data)
 	resp.Diagnostics.Append(resp.State.Set(ctx, &data)...)
+}
+
+// setGroupOrder applies group_order through the update endpoint, the only one
+// that accepts it. Field presence keeps the rest of the component untouched.
+func (r *componentResource) setGroupOrder(ctx context.Context, id string, groupOrder int64) (*statuspagev1.PageComponent, error) {
+	req := &statuspagev1.UpdateComponentRequest{}
+	req.SetId(id)
+	req.SetGroupOrder(int32(groupOrder))
+
+	apiResp, err := r.client.StatusPage.UpdateComponent(ctx, connect.NewRequest(req))
+	if err != nil {
+		return nil, err
+	}
+	return apiResp.Msg.GetComponent(), nil
 }
 
 func (r *componentResource) Read(ctx context.Context, req resource.ReadRequest, resp *resource.ReadResponse) {

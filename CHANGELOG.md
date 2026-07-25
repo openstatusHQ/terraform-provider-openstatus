@@ -15,7 +15,7 @@
 
 ### Fixed
 
-- **`group_order` is no longer sent when creating an `openstatus_status_page_component`.** The API's create endpoints have no such field, so the value was being silently discarded. It is still applied on update, which is where the API accepts it. Set `group_order` and it will be applied on the apply following creation.
+- **`group_order` set on a new `openstatus_status_page_component` is now actually applied.** The API's create endpoints have no such field, so the value was being silently discarded while state kept the value from your configuration — meaning the diff never resurfaced and the component stayed unordered within its group. The provider now creates the component and then applies `group_order` through the update endpoint, which is the one that accepts it, within the same apply.
 
 ## v0.2.3
 

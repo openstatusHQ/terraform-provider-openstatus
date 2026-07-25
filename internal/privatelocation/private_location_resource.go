@@ -244,7 +244,7 @@ func privateLocationAPIToModel(ctx context.Context, api *privatelocationv1.Priva
 		diags.Append(d...)
 		data.MonitorIDs = set
 	} else {
-		data.MonitorIDs = types.SetNull(types.StringType)
+		data.MonitorIDs = emptyOrNullSet(ctx, data.MonitorIDs, &diags)
 	}
 
 	if len(api.GetMetadata()) > 0 {
@@ -252,8 +252,34 @@ func privateLocationAPIToModel(ctx context.Context, api *privatelocationv1.Priva
 		diags.Append(d...)
 		data.Metadata = m
 	} else {
-		data.Metadata = types.MapNull(types.StringType)
+		data.Metadata = emptyOrNullMap(ctx, data.Metadata, &diags)
 	}
 
 	return diags
+}
+
+// emptyOrNullSet maps a "no monitors" response back to the shape Terraform
+// planned: null when the attribute was omitted, an empty set when the
+// configuration set `monitor_ids = []`. Both send the same request, but
+// monitor_ids is Optional and not Computed, so writing null over a planned
+// empty set fails the apply with "Provider produced inconsistent result after
+// apply". Unknown collapses to null: the framework only leaves a non-Computed
+// attribute unknown while the config still references an unresolved value.
+func emptyOrNullSet(ctx context.Context, planned types.Set, diags *diag.Diagnostics) types.Set {
+	if planned.IsNull() || planned.IsUnknown() {
+		return types.SetNull(types.StringType)
+	}
+	set, d := types.SetValueFrom(ctx, types.StringType, []string{})
+	diags.Append(d...)
+	return set
+}
+
+// emptyOrNullMap is emptyOrNullSet for `metadata = {}`.
+func emptyOrNullMap(ctx context.Context, planned types.Map, diags *diag.Diagnostics) types.Map {
+	if planned.IsNull() || planned.IsUnknown() {
+		return types.MapNull(types.StringType)
+	}
+	m, d := types.MapValueFrom(ctx, types.StringType, map[string]string{})
+	diags.Append(d...)
+	return m
 }

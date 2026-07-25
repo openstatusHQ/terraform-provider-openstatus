@@ -114,6 +114,36 @@ resource "openstatus_private_location" "eu" {
 	})
 }
 
+// `monitor_ids = []` and `metadata = {}` are not the same as omitting them:
+// the plan holds an empty collection, so post-apply state must too.
+func TestAccPrivateLocationExplicitEmptyCollections(t *testing.T) {
+	server, _ := testutil.NewServer(t)
+	cfg := testutil.ProviderConfig(server)
+
+	config := cfg + `
+resource "openstatus_private_location" "eu" {
+  name        = "EU Datacenter"
+  monitor_ids = []
+  metadata    = {}
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testutil.ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("openstatus_private_location.eu", "monitor_ids.#", "0"),
+					resource.TestCheckResourceAttr("openstatus_private_location.eu", "metadata.%", "0"),
+				),
+			},
+			// Refresh must not flip the empty collections back to null.
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
+
 func TestAccPrivateLocationDataSources(t *testing.T) {
 	server, _ := testutil.NewServer(t)
 	cfg := testutil.ProviderConfig(server)

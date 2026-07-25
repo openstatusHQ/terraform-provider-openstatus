@@ -55,6 +55,15 @@ func (f *Fake) nextID(prefix string) string {
 	return fmt.Sprintf("%s_%d", prefix, f.seq)
 }
 
+// Component returns the stored component, or nil when it does not exist. Tests
+// use it to assert what actually reached the server, not just what the
+// provider wrote to state.
+func (f *Fake) Component(id string) *statuspagev1.PageComponent {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return f.components[id]
+}
+
 func notFound(kind, id string) *connect.Error {
 	return connect.NewError(connect.CodeNotFound, fmt.Errorf("%s %q not found", kind, id))
 }

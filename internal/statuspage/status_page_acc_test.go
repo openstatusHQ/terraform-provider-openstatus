@@ -1,11 +1,13 @@
 package statuspage_test
 
 import (
+	"fmt"
 	"testing"
 
 	"terraform-provider-openstatus/internal/testutil"
 
 	"github.com/hashicorp/terraform-plugin-testing/helper/resource"
+	"github.com/hashicorp/terraform-plugin-testing/terraform"
 )
 
 func TestAccStatusPage(t *testing.T) {
@@ -111,6 +113,67 @@ resource "openstatus_status_page" "themed" {
 			},
 		},
 	})
+}
+
+// group_order is rejected by the create endpoints, so the provider applies it
+// with a follow-up update. State alone proves nothing here: the read-back
+// mapper keeps a planned value whenever the API reports zero, so a value that
+// never reached the server would still look correct in state and produce an
+// empty plan. Assert against the server's copy.
+func TestAccStatusPageComponentGroupOrderOnCreate(t *testing.T) {
+	server, fake := testutil.NewServer(t)
+	cfg := testutil.ProviderConfig(server)
+
+	config := cfg + `
+resource "openstatus_status_page" "main" {
+  title = "Grouped Page"
+  slug  = "grouped-page"
+}
+
+resource "openstatus_status_page_component_group" "infra" {
+  page_id = openstatus_status_page.main.id
+  name    = "Infrastructure"
+}
+
+resource "openstatus_status_page_component" "info" {
+  page_id     = openstatus_status_page.main.id
+  type        = "static"
+  name        = "Third-party Services"
+  group_id    = openstatus_status_page_component_group.infra.id
+  group_order = 7
+}
+`
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testutil.ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: config,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("openstatus_status_page_component.info", "group_order", "7"),
+					checkServerGroupOrder(fake, "openstatus_status_page_component.info", 7),
+				),
+			},
+			{Config: config, PlanOnly: true},
+		},
+	})
+}
+
+func checkServerGroupOrder(fake *testutil.Fake, resourceName string, want int32) resource.TestCheckFunc {
+	return func(s *terraform.State) error {
+		rs, ok := s.RootModule().Resources[resourceName]
+		if !ok {
+			return fmt.Errorf("%s not found in state", resourceName)
+		}
+		component := fake.Component(rs.Primary.ID)
+		if component == nil {
+			return fmt.Errorf("component %s does not exist on the server", rs.Primary.ID)
+		}
+		if got := component.GetGroupOrder(); got != want {
+			return fmt.Errorf("server-side group_order = %d, want %d", got, want)
+		}
+		return nil
+	}
 }
 
 func TestAccStatusPageComponentAndGroup(t *testing.T) {
