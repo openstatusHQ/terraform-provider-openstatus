@@ -328,7 +328,7 @@ func tcpAPIToModel(ctx context.Context, api *monitorv1.TCPMonitor, data *tcpMoni
 		data.Regions = types.SetNull(types.StringType)
 	}
 
-	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry())
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry(), data.OpenTelemetry)
 	diags.Append(otelDiags...)
 	data.OpenTelemetry = otelObj
 

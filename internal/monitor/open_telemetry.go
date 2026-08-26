@@ -54,7 +54,8 @@ type otelHeaderTF struct {
 }
 
 type otelTF struct {
-	Endpoint string         `tfsdk:"endpoint"`
+	// types.String rather than string: endpoint is optional and may be null.
+	Endpoint types.String   `tfsdk:"endpoint"`
 	Headers  []otelHeaderTF `tfsdk:"headers"`
 }
 
@@ -70,7 +71,7 @@ func openTelemetryToAPI(ctx context.Context, obj types.Object) (*monitorv1.OpenT
 	}
 
 	out := &monitorv1.OpenTelemetryConfig{}
-	out.SetEndpoint(src.Endpoint)
+	out.SetEndpoint(src.Endpoint.ValueString())
 	headers := make([]*monitorv1.Headers, 0, len(src.Headers))
 	for _, h := range src.Headers {
 		header := &monitorv1.Headers{}
@@ -84,10 +85,17 @@ func openTelemetryToAPI(ctx context.Context, obj types.Object) (*monitorv1.OpenT
 	return out, diags
 }
 
-func openTelemetryFromAPI(_ context.Context, api *monitorv1.OpenTelemetryConfig) (types.Object, diag.Diagnostics) {
+// prior is the planned (or state) open_telemetry object; an empty endpoint from
+// the API maps back to null when the configuration left it unset, so the block
+// keeps the shape Terraform planned.
+func openTelemetryFromAPI(_ context.Context, api *monitorv1.OpenTelemetryConfig, prior types.Object) (types.Object, diag.Diagnostics) {
 	var diags diag.Diagnostics
 	if api == nil {
 		return types.ObjectNull(openTelemetryObjTypes), diags
+	}
+	endpoint := types.StringValue(api.GetEndpoint())
+	if api.GetEndpoint() == "" && priorEndpointIsNull(prior) {
+		endpoint = types.StringNull()
 	}
 	headerObjs := make([]attr.Value, 0, len(api.GetHeaders()))
 	for _, h := range api.GetHeaders() {
@@ -101,9 +109,24 @@ func openTelemetryFromAPI(_ context.Context, api *monitorv1.OpenTelemetryConfig)
 	headersList, d := types.ListValue(types.ObjectType{AttrTypes: openTelemetryHeaderObjTypes}, headerObjs)
 	diags.Append(d...)
 	obj, d := types.ObjectValue(openTelemetryObjTypes, map[string]attr.Value{
-		"endpoint": types.StringValue(api.GetEndpoint()),
+		"endpoint": endpoint,
 		"headers":  headersList,
 	})
 	diags.Append(d...)
 	return obj, diags
+}
+
+func priorEndpointIsNull(prior types.Object) bool {
+	if prior.IsNull() || prior.IsUnknown() {
+		return true
+	}
+	v, ok := prior.Attributes()["endpoint"]
+	if !ok {
+		return true
+	}
+	s, ok := v.(types.String)
+	if !ok {
+		return true
+	}
+	return s.IsNull()
 }

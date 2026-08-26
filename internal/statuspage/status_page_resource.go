@@ -171,13 +171,13 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:   true,
 				Computed:   true,
 				Default:    stringdefault.StaticString("en"),
-				Validators: []validator.String{stringvalidator.OneOf("en", "fr", "de")},
+				Validators: []validator.String{stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr")},
 			},
 			"locales": schema.ListAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
 				Validators: []validator.List{
-					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de")),
+					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr")),
 				},
 			},
 			"allow_index": schema.BoolAttribute{
@@ -562,6 +562,12 @@ func localeToProto(tf string) statuspagev1.Locale {
 		return statuspagev1.Locale_LOCALE_FR
 	case "de":
 		return statuspagev1.Locale_LOCALE_DE
+	case "hi":
+		return statuspagev1.Locale_LOCALE_HI
+	case "ko":
+		return statuspagev1.Locale_LOCALE_KO
+	case "tr":
+		return statuspagev1.Locale_LOCALE_TR
 	}
 	return statuspagev1.Locale_LOCALE_UNSPECIFIED
 }
@@ -574,6 +580,12 @@ func localeFromProto(proto statuspagev1.Locale) (string, bool) {
 		return "fr", true
 	case statuspagev1.Locale_LOCALE_DE:
 		return "de", true
+	case statuspagev1.Locale_LOCALE_HI:
+		return "hi", true
+	case statuspagev1.Locale_LOCALE_KO:
+		return "ko", true
+	case statuspagev1.Locale_LOCALE_TR:
+		return "tr", true
 	}
 	return "", false
 }

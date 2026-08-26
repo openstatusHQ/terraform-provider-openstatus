@@ -602,7 +602,7 @@ func httpAPIToModel(ctx context.Context, api *monitorv1.HTTPMonitor, data *httpM
 		data.HeaderAssertions = list
 	}
 
-	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry())
+	otelObj, otelDiags := openTelemetryFromAPI(ctx, api.GetOpenTelemetry(), data.OpenTelemetry)
 	diags.Append(otelDiags...)
 	data.OpenTelemetry = otelObj
 
