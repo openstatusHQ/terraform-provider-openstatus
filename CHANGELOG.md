@@ -15,6 +15,7 @@
 
 ### Fixed
 
+- **Duplicate values in `openstatus_status_page.locales` are now rejected at plan time** instead of failing the apply with `Provider produced inconsistent result after apply: .locales[N] ... element N has vanished`. The API stores locales as a set, so `["de", "en", "en", "en", "fr"]` came back as `["de", "en", "fr"]` and Terraform flagged the mismatch as a provider bug. `terraform plan` now reports `Duplicate List Value` on the offending attribute; list each locale once (ordering is still yours to choose).
 - **`group_order` set on a new `openstatus_status_page_component` is now actually applied.** The API's create endpoints have no such field, so the value was being silently discarded while state kept the value from your configuration — meaning the diff never resurfaced and the component stayed unordered within its group. The provider now creates the component and then applies `group_order` through the update endpoint, which is the one that accepts it, within the same apply.
 
 ## v0.2.3

@@ -6,7 +6,13 @@ import (
 
 	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 
+	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/diag"
+	"github.com/hashicorp/terraform-plugin-framework/path"
+	"github.com/hashicorp/terraform-plugin-framework/resource"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
+	"github.com/hashicorp/terraform-plugin-framework/types"
 )
 
 // --- create request construction ---
@@ -251,6 +257,57 @@ func TestLocaleRoundTrip(t *testing.T) {
 		if _, ok := localeFromProto(proto); ok {
 			t.Errorf("localeFromProto(%v) ok=true, want false", proto)
 		}
+	}
+}
+
+// The API stores locales as a set: a duplicated locale comes back once, which
+// used to fail apply with "Provider produced inconsistent result after apply".
+// Duplicates must be rejected at plan time instead.
+func TestLocalesSchemaRejectsDuplicates(t *testing.T) {
+	ctx := context.Background()
+
+	schemaResp := &resource.SchemaResponse{}
+	(&statusPageResource{}).Schema(ctx, resource.SchemaRequest{}, schemaResp)
+	localesAttr, ok := schemaResp.Schema.Attributes["locales"].(schema.ListAttribute)
+	if !ok {
+		t.Fatalf("locales attribute = %T, want schema.ListAttribute", schemaResp.Schema.Attributes["locales"])
+	}
+
+	cases := map[string]struct {
+		locales []string
+		wantErr bool
+	}{
+		"unique":             {locales: []string{"de", "en", "fr"}},
+		"duplicate":          {locales: []string{"de", "en", "en", "en", "fr"}, wantErr: true},
+		"duplicate adjacent": {locales: []string{"en", "en"}, wantErr: true},
+		"unknown locale":     {locales: []string{"es"}, wantErr: true},
+	}
+
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			elems := make([]attr.Value, 0, len(tc.locales))
+			for _, l := range tc.locales {
+				elems = append(elems, types.StringValue(l))
+			}
+			list, diags := types.ListValue(types.StringType, elems)
+			if diags.HasError() {
+				t.Fatalf("building list: %v", diags)
+			}
+
+			var got diag.Diagnostics
+			for _, v := range localesAttr.Validators {
+				vResp := &validator.ListResponse{}
+				v.ValidateList(ctx, validator.ListRequest{
+					Path:        path.Root("locales"),
+					ConfigValue: list,
+				}, vResp)
+				got.Append(vResp.Diagnostics...)
+			}
+
+			if got.HasError() != tc.wantErr {
+				t.Errorf("locales %v: error = %v, want %v (%v)", tc.locales, got.HasError(), tc.wantErr, got)
+			}
+		})
 	}
 }
 
