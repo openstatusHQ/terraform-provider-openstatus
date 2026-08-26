@@ -3,8 +3,8 @@ module terraform-provider-openstatus
 go 1.25.8
 
 require (
-	buf.build/gen/go/openstatus/api/connectrpc/go v1.20.0-20260727085848-65e5c3248a1e.1
-	buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.11-20260727085848-65e5c3248a1e.1
+	buf.build/gen/go/openstatus/api/connectrpc/go v1.20.0-20260826071311-8210bb95208b.1
+	buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20260826071311-8210bb95208b.1
 	connectrpc.com/connect v1.20.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
@@ -13,8 +13,8 @@ require (
 )
 
 require (
-	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.11-20251209175733-2a1774d88802.1 // indirect
-	buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.11-20230414000709-087bc8072ce4.1 // indirect
+	buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20251209175733-2a1774d88802.1 // indirect
+	buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.12-20230414000709-087bc8072ce4.1 // indirect
 	github.com/ProtonMail/go-crypto v1.4.1 // indirect
 	github.com/agext/levenshtein v1.2.3 // indirect
 	github.com/apparentlymart/go-textseg/v15 v15.0.0 // indirect
@@ -64,5 +64,5 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.11 // indirect
+	google.golang.org/protobuf v1.36.12 // indirect
 )

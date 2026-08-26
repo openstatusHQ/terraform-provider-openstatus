@@ -135,6 +135,16 @@ func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadReques
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
+	for _, m := range apiResp.Msg.GetIcmpMonitors() {
+		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
+			"id":                   types.StringValue(m.GetId()),
+			"name":                 types.StringValue(m.GetName()),
+			"type":                 types.StringValue("icmp"),
+			"private_location_ids": privateLocationSet(ctx, m.GetPrivateLocationIds(), &resp.Diagnostics),
+		})
+		resp.Diagnostics.Append(diags...)
+		objs = append(objs, obj)
+	}
 
 	monitorList, diags := types.ListValue(types.ObjectType{AttrTypes: monitorSummaryObjTypes}, objs)
 	resp.Diagnostics.Append(diags...)

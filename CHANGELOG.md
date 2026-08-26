@@ -1,5 +1,11 @@
 # Changelog
 
+## v0.4.0
+
+### Added
+
+- **`openstatus_icmp_monitor`** (resource) — ping-based monitoring of a host or IP address. Mirrors the other monitor resources (`name`, `uri`, `periodicity`, `timeout`, `degraded_at`, `retry`, `active`, `public`, `description`, `regions`, `open_telemetry`, `private_location_ids`) and is surfaced in the `openstatus_monitor` and `openstatus_monitors` data sources with `type = "icmp"`.
+
 ## v0.3.0
 
 ### Added
