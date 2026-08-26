@@ -40,6 +40,7 @@ Full documentation is available on the [Terraform Registry](https://registry.ter
 - `openstatus_http_monitor` — HTTP monitors with assertions
 - `openstatus_tcp_monitor` — TCP connection monitors
 - `openstatus_dns_monitor` — DNS record monitors
+- `openstatus_icmp_monitor` — ICMP ping monitors
 - `openstatus_notification` — Notification channels (Slack, Discord, PagerDuty, email, webhook, etc.)
 - `openstatus_status_page` — Status pages (title, slug, description, homepage_url, contact_url, icon, custom_domain, access_type, password, auth_email_domains)
 - `openstatus_status_page_component` — Status page components (monitor or static, with order and group_order)

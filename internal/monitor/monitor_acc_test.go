@@ -118,6 +118,51 @@ resource "openstatus_tcp_monitor" "db" {
 	})
 }
 
+func TestAccICMPMonitor(t *testing.T) {
+	server, _ := testutil.NewServer(t)
+	cfg := testutil.ProviderConfig(server)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testutil.ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: cfg + `
+resource "openstatus_icmp_monitor" "gw" {
+  name        = "Gateway Ping"
+  uri         = "8.8.8.8"
+  periodicity = "1m"
+  timeout     = 10000
+  active      = true
+  regions     = ["fly-iad", "fly-fra"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("openstatus_icmp_monitor.gw", "id"),
+					resource.TestCheckResourceAttr("openstatus_icmp_monitor.gw", "uri", "8.8.8.8"),
+					resource.TestCheckResourceAttr("openstatus_icmp_monitor.gw", "regions.#", "2"),
+				),
+			},
+			{
+				Config: cfg + `
+resource "openstatus_icmp_monitor" "gw" {
+  name        = "Gateway Ping v2"
+  uri         = "1.1.1.1"
+  periodicity = "5m"
+  timeout     = 20000
+  active      = true
+  regions     = ["fly-iad"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("openstatus_icmp_monitor.gw", "name", "Gateway Ping v2"),
+					resource.TestCheckResourceAttr("openstatus_icmp_monitor.gw", "uri", "1.1.1.1"),
+					resource.TestCheckResourceAttr("openstatus_icmp_monitor.gw", "periodicity", "5m"),
+				),
+			},
+		},
+	})
+}
+
 func TestAccDNSMonitor(t *testing.T) {
 	server, _ := testutil.NewServer(t)
 	cfg := testutil.ProviderConfig(server)
@@ -190,19 +235,26 @@ resource "openstatus_http_monitor" "api" {
   regions     = ["fly-iad"]
 }
 
+resource "openstatus_icmp_monitor" "gw" {
+  name        = "Data Source Ping"
+  uri         = "8.8.8.8"
+  periodicity = "5m"
+  regions     = ["fly-iad"]
+}
+
 data "openstatus_monitor" "existing" {
   id = openstatus_http_monitor.api.id
 }
 
 data "openstatus_monitors" "all" {
   limit      = 100
-  depends_on = [openstatus_http_monitor.api]
+  depends_on = [openstatus_http_monitor.api, openstatus_icmp_monitor.gw]
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.openstatus_monitor.existing", "name", "Data Source Probe"),
 					resource.TestCheckResourceAttr("data.openstatus_monitor.existing", "url", "https://api.example.com/health"),
-					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.#", "1"),
+					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.#", "2"),
 					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.0.name", "Data Source Probe"),
 					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.0.type", "http"),
 				),

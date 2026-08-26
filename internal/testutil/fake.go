@@ -30,6 +30,7 @@ type Fake struct {
 	httpMonitors     map[string]*monitorv1.HTTPMonitor
 	tcpMonitors      map[string]*monitorv1.TCPMonitor
 	dnsMonitors      map[string]*monitorv1.DNSMonitor
+	icmpMonitors     map[string]*monitorv1.ICMPMonitor
 	notifications    map[string]*notificationv1.Notification
 	statusPages      map[string]*statuspagev1.StatusPage
 	components       map[string]*statuspagev1.PageComponent
@@ -42,6 +43,7 @@ func NewFake() *Fake {
 		httpMonitors:     map[string]*monitorv1.HTTPMonitor{},
 		tcpMonitors:      map[string]*monitorv1.TCPMonitor{},
 		dnsMonitors:      map[string]*monitorv1.DNSMonitor{},
+		icmpMonitors:     map[string]*monitorv1.ICMPMonitor{},
 		notifications:    map[string]*notificationv1.Notification{},
 		statusPages:      map[string]*statuspagev1.StatusPage{},
 		components:       map[string]*statuspagev1.PageComponent{},
@@ -121,6 +123,22 @@ func (s *monitorService) CreateDNSMonitor(_ context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
+func (s *monitorService) CreateICMPMonitor(_ context.Context, req *connect.Request[monitorv1.CreateICMPMonitorRequest]) (*connect.Response[monitorv1.CreateICMPMonitorResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	m := req.Msg.GetMonitor()
+	if m == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("monitor is required"))
+	}
+	m.SetId(s.f.nextID("icmp"))
+	s.f.icmpMonitors[m.GetId()] = m
+
+	resp := &monitorv1.CreateICMPMonitorResponse{}
+	resp.SetMonitor(m)
+	return connect.NewResponse(resp), nil
+}
+
 func (s *monitorService) UpdateHTTPMonitor(_ context.Context, req *connect.Request[monitorv1.UpdateHTTPMonitorRequest]) (*connect.Response[monitorv1.UpdateHTTPMonitorResponse], error) {
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -172,6 +190,23 @@ func (s *monitorService) UpdateDNSMonitor(_ context.Context, req *connect.Reques
 	return connect.NewResponse(resp), nil
 }
 
+func (s *monitorService) UpdateICMPMonitor(_ context.Context, req *connect.Request[monitorv1.UpdateICMPMonitorRequest]) (*connect.Response[monitorv1.UpdateICMPMonitorResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	id := req.Msg.GetId()
+	if _, ok := s.f.icmpMonitors[id]; !ok {
+		return nil, notFound("icmp monitor", id)
+	}
+	m := req.Msg.GetMonitor()
+	m.SetId(id)
+	s.f.icmpMonitors[id] = m
+
+	resp := &monitorv1.UpdateICMPMonitorResponse{}
+	resp.SetMonitor(m)
+	return connect.NewResponse(resp), nil
+}
+
 func (s *monitorService) GetMonitor(_ context.Context, req *connect.Request[monitorv1.GetMonitorRequest]) (*connect.Response[monitorv1.GetMonitorResponse], error) {
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -185,6 +220,8 @@ func (s *monitorService) GetMonitor(_ context.Context, req *connect.Request[moni
 		config.SetTcp(s.f.tcpMonitors[id])
 	case s.f.dnsMonitors[id] != nil:
 		config.SetDns(s.f.dnsMonitors[id])
+	case s.f.icmpMonitors[id] != nil:
+		config.SetIcmp(s.f.icmpMonitors[id])
 	default:
 		return nil, notFound("monitor", id)
 	}
@@ -216,11 +253,18 @@ func (s *monitorService) ListMonitors(_ context.Context, _ *connect.Request[moni
 	}
 	sort.Slice(dnss, func(i, j int) bool { return dnss[i].GetId() < dnss[j].GetId() })
 
+	icmps := make([]*monitorv1.ICMPMonitor, 0, len(s.f.icmpMonitors))
+	for _, m := range s.f.icmpMonitors {
+		icmps = append(icmps, m)
+	}
+	sort.Slice(icmps, func(i, j int) bool { return icmps[i].GetId() < icmps[j].GetId() })
+
 	resp := &monitorv1.ListMonitorsResponse{}
 	resp.SetHttpMonitors(https)
 	resp.SetTcpMonitors(tcps)
 	resp.SetDnsMonitors(dnss)
-	resp.SetTotalSize(int32(len(https) + len(tcps) + len(dnss)))
+	resp.SetIcmpMonitors(icmps)
+	resp.SetTotalSize(int32(len(https) + len(tcps) + len(dnss) + len(icmps)))
 	return connect.NewResponse(resp), nil
 }
 
@@ -232,12 +276,14 @@ func (s *monitorService) DeleteMonitor(_ context.Context, req *connect.Request[m
 	_, isHTTP := s.f.httpMonitors[id]
 	_, isTCP := s.f.tcpMonitors[id]
 	_, isDNS := s.f.dnsMonitors[id]
-	if !isHTTP && !isTCP && !isDNS {
+	_, isICMP := s.f.icmpMonitors[id]
+	if !isHTTP && !isTCP && !isDNS && !isICMP {
 		return nil, notFound("monitor", id)
 	}
 	delete(s.f.httpMonitors, id)
 	delete(s.f.tcpMonitors, id)
 	delete(s.f.dnsMonitors, id)
+	delete(s.f.icmpMonitors, id)
 
 	resp := &monitorv1.DeleteMonitorResponse{}
 	resp.SetSuccess(true)

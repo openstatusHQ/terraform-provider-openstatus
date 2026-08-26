@@ -137,6 +137,19 @@ func (d *monitorDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
 			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
 		}
+	case config.GetIcmp() != nil:
+		m := config.GetIcmp()
+		data.Type = types.StringValue("icmp")
+		data.Name = types.StringValue(m.GetName())
+		data.URI = types.StringValue(m.GetUri())
+		data.Periodicity = types.StringValue(MapPeriodicityFromAPI(m.GetPeriodicity()))
+		data.Active = types.BoolValue(m.GetActive())
+		data.Public = types.BoolValue(m.GetPublic())
+		data.Description = types.StringValue(m.GetDescription())
+		data.Timeout = types.Int64Value(m.GetTimeout())
+		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
+		}
 	default:
 		resp.Diagnostics.AddError("Monitor not found", "No monitor returned for ID: "+data.ID.ValueString())
 		return
@@ -157,6 +170,8 @@ func privateLocationIDs(config *monitorv1.MonitorConfig) []string {
 		return config.GetTcp().GetPrivateLocationIds()
 	case config.GetDns() != nil:
 		return config.GetDns().GetPrivateLocationIds()
+	case config.GetIcmp() != nil:
+		return config.GetIcmp().GetPrivateLocationIds()
 	}
 	return nil
 }
