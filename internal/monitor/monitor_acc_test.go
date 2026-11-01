@@ -163,6 +163,65 @@ resource "openstatus_icmp_monitor" "gw" {
 	})
 }
 
+func TestAccGRPCMonitor(t *testing.T) {
+	server, _ := testutil.NewServer(t)
+	cfg := testutil.ProviderConfig(server)
+
+	resource.Test(t, resource.TestCase{
+		ProtoV6ProviderFactories: testutil.ProviderFactories(),
+		Steps: []resource.TestStep{
+			{
+				Config: cfg + `
+resource "openstatus_grpc_monitor" "api" {
+  name        = "gRPC Health"
+  uri         = "grpc.example.com:443"
+  periodicity = "1m"
+  service     = "my.package.Service"
+  tls_mode    = "plaintext"
+  regions     = ["fly-iad", "fly-fra"]
+
+  metadata {
+    key   = "authorization"
+    value = "Bearer token"
+  }
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttrSet("openstatus_grpc_monitor.api", "id"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "uri", "grpc.example.com:443"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "service", "my.package.Service"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "tls_mode", "plaintext"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "metadata.#", "1"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "metadata.0.key", "authorization"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "regions.#", "2"),
+				),
+			},
+			{
+				Config: cfg + `
+resource "openstatus_grpc_monitor" "api" {
+  name        = "gRPC Health v2"
+  uri         = "[2001:db8::1]:50051"
+  periodicity = "5m"
+  regions     = ["fly-iad"]
+}
+`,
+				Check: resource.ComposeAggregateTestCheckFunc(
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "name", "gRPC Health v2"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "uri", "[2001:db8::1]:50051"),
+					resource.TestCheckNoResourceAttr("openstatus_grpc_monitor.api", "service"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "tls_mode", "tls"),
+					resource.TestCheckResourceAttr("openstatus_grpc_monitor.api", "metadata.#", "0"),
+				),
+			},
+			{
+				ResourceName:      "openstatus_grpc_monitor.api",
+				ImportState:       true,
+				ImportStateVerify: true,
+			},
+		},
+	})
+}
+
 func TestAccDNSMonitor(t *testing.T) {
 	server, _ := testutil.NewServer(t)
 	cfg := testutil.ProviderConfig(server)
@@ -242,19 +301,32 @@ resource "openstatus_icmp_monitor" "gw" {
   regions     = ["fly-iad"]
 }
 
+resource "openstatus_grpc_monitor" "api" {
+  name        = "Data Source gRPC"
+  uri         = "grpc.example.com:443"
+  periodicity = "5m"
+  regions     = ["fly-iad"]
+}
+
+data "openstatus_monitor" "grpc" {
+  id = openstatus_grpc_monitor.api.id
+}
+
 data "openstatus_monitor" "existing" {
   id = openstatus_http_monitor.api.id
 }
 
 data "openstatus_monitors" "all" {
   limit      = 100
-  depends_on = [openstatus_http_monitor.api, openstatus_icmp_monitor.gw]
+  depends_on = [openstatus_http_monitor.api, openstatus_icmp_monitor.gw, openstatus_grpc_monitor.api]
 }
 `,
 				Check: resource.ComposeAggregateTestCheckFunc(
 					resource.TestCheckResourceAttr("data.openstatus_monitor.existing", "name", "Data Source Probe"),
 					resource.TestCheckResourceAttr("data.openstatus_monitor.existing", "url", "https://api.example.com/health"),
-					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.#", "2"),
+					resource.TestCheckResourceAttr("data.openstatus_monitor.grpc", "type", "grpc"),
+					resource.TestCheckResourceAttr("data.openstatus_monitor.grpc", "uri", "grpc.example.com:443"),
+					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.#", "3"),
 					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.0.name", "Data Source Probe"),
 					resource.TestCheckResourceAttr("data.openstatus_monitors.all", "monitors.0.type", "http"),
 				),

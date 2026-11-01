@@ -106,7 +106,7 @@ Required:
 Required:
 
 - `key` (String)
-- `value` (String)
+- `value` (String, Sensitive)
 
 
 <a id="nestedblock--open_telemetry"></a>

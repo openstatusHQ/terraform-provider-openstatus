@@ -31,6 +31,7 @@ type Fake struct {
 	tcpMonitors      map[string]*monitorv1.TCPMonitor
 	dnsMonitors      map[string]*monitorv1.DNSMonitor
 	icmpMonitors     map[string]*monitorv1.ICMPMonitor
+	grpcMonitors     map[string]*monitorv1.GRPCMonitor
 	notifications    map[string]*notificationv1.Notification
 	statusPages      map[string]*statuspagev1.StatusPage
 	components       map[string]*statuspagev1.PageComponent
@@ -44,6 +45,7 @@ func NewFake() *Fake {
 		tcpMonitors:      map[string]*monitorv1.TCPMonitor{},
 		dnsMonitors:      map[string]*monitorv1.DNSMonitor{},
 		icmpMonitors:     map[string]*monitorv1.ICMPMonitor{},
+		grpcMonitors:     map[string]*monitorv1.GRPCMonitor{},
 		notifications:    map[string]*notificationv1.Notification{},
 		statusPages:      map[string]*statuspagev1.StatusPage{},
 		components:       map[string]*statuspagev1.PageComponent{},
@@ -139,6 +141,26 @@ func (s *monitorService) CreateICMPMonitor(_ context.Context, req *connect.Reque
 	return connect.NewResponse(resp), nil
 }
 
+// CreateGRPCMonitor mirrors the API: an unspecified tls_mode is stored as TLS.
+func (s *monitorService) CreateGRPCMonitor(_ context.Context, req *connect.Request[monitorv1.CreateGRPCMonitorRequest]) (*connect.Response[monitorv1.CreateGRPCMonitorResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	m := req.Msg.GetMonitor()
+	if m == nil {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("monitor is required"))
+	}
+	if m.GetTlsMode() == monitorv1.GRPCTlsMode_GRPC_TLS_MODE_UNSPECIFIED {
+		m.SetTlsMode(monitorv1.GRPCTlsMode_GRPC_TLS_MODE_TLS)
+	}
+	m.SetId(s.f.nextID("grpc"))
+	s.f.grpcMonitors[m.GetId()] = m
+
+	resp := &monitorv1.CreateGRPCMonitorResponse{}
+	resp.SetMonitor(m)
+	return connect.NewResponse(resp), nil
+}
+
 func (s *monitorService) UpdateHTTPMonitor(_ context.Context, req *connect.Request[monitorv1.UpdateHTTPMonitorRequest]) (*connect.Response[monitorv1.UpdateHTTPMonitorResponse], error) {
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -207,6 +229,28 @@ func (s *monitorService) UpdateICMPMonitor(_ context.Context, req *connect.Reque
 	return connect.NewResponse(resp), nil
 }
 
+// UpdateGRPCMonitor mirrors the API: an unspecified tls_mode keeps the stored value.
+func (s *monitorService) UpdateGRPCMonitor(_ context.Context, req *connect.Request[monitorv1.UpdateGRPCMonitorRequest]) (*connect.Response[monitorv1.UpdateGRPCMonitorResponse], error) {
+	s.f.mu.Lock()
+	defer s.f.mu.Unlock()
+
+	id := req.Msg.GetId()
+	prev, ok := s.f.grpcMonitors[id]
+	if !ok {
+		return nil, notFound("grpc monitor", id)
+	}
+	m := req.Msg.GetMonitor()
+	if m.GetTlsMode() == monitorv1.GRPCTlsMode_GRPC_TLS_MODE_UNSPECIFIED {
+		m.SetTlsMode(prev.GetTlsMode())
+	}
+	m.SetId(id)
+	s.f.grpcMonitors[id] = m
+
+	resp := &monitorv1.UpdateGRPCMonitorResponse{}
+	resp.SetMonitor(m)
+	return connect.NewResponse(resp), nil
+}
+
 func (s *monitorService) GetMonitor(_ context.Context, req *connect.Request[monitorv1.GetMonitorRequest]) (*connect.Response[monitorv1.GetMonitorResponse], error) {
 	s.f.mu.Lock()
 	defer s.f.mu.Unlock()
@@ -222,6 +266,8 @@ func (s *monitorService) GetMonitor(_ context.Context, req *connect.Request[moni
 		config.SetDns(s.f.dnsMonitors[id])
 	case s.f.icmpMonitors[id] != nil:
 		config.SetIcmp(s.f.icmpMonitors[id])
+	case s.f.grpcMonitors[id] != nil:
+		config.SetGrpc(s.f.grpcMonitors[id])
 	default:
 		return nil, notFound("monitor", id)
 	}
@@ -259,12 +305,19 @@ func (s *monitorService) ListMonitors(_ context.Context, _ *connect.Request[moni
 	}
 	sort.Slice(icmps, func(i, j int) bool { return icmps[i].GetId() < icmps[j].GetId() })
 
+	grpcs := make([]*monitorv1.GRPCMonitor, 0, len(s.f.grpcMonitors))
+	for _, m := range s.f.grpcMonitors {
+		grpcs = append(grpcs, m)
+	}
+	sort.Slice(grpcs, func(i, j int) bool { return grpcs[i].GetId() < grpcs[j].GetId() })
+
 	resp := &monitorv1.ListMonitorsResponse{}
 	resp.SetHttpMonitors(https)
 	resp.SetTcpMonitors(tcps)
 	resp.SetDnsMonitors(dnss)
 	resp.SetIcmpMonitors(icmps)
-	resp.SetTotalSize(int32(len(https) + len(tcps) + len(dnss) + len(icmps)))
+	resp.SetGrpcMonitors(grpcs)
+	resp.SetTotalSize(int32(len(https) + len(tcps) + len(dnss) + len(icmps) + len(grpcs)))
 	return connect.NewResponse(resp), nil
 }
 
@@ -277,13 +330,15 @@ func (s *monitorService) DeleteMonitor(_ context.Context, req *connect.Request[m
 	_, isTCP := s.f.tcpMonitors[id]
 	_, isDNS := s.f.dnsMonitors[id]
 	_, isICMP := s.f.icmpMonitors[id]
-	if !isHTTP && !isTCP && !isDNS && !isICMP {
+	_, isGRPC := s.f.grpcMonitors[id]
+	if !isHTTP && !isTCP && !isDNS && !isICMP && !isGRPC {
 		return nil, notFound("monitor", id)
 	}
 	delete(s.f.httpMonitors, id)
 	delete(s.f.tcpMonitors, id)
 	delete(s.f.dnsMonitors, id)
 	delete(s.f.icmpMonitors, id)
+	delete(s.f.grpcMonitors, id)
 
 	resp := &monitorv1.DeleteMonitorResponse{}
 	resp.SetSuccess(true)

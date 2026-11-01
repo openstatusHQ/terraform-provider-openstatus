@@ -140,6 +140,20 @@ func TestMapRecordComparatorRoundtrip(t *testing.T) {
 	}
 }
 
+func TestMapGRPCTLSModeRoundtrip(t *testing.T) {
+	for _, mode := range GRPCTLSModeValues {
+		api, err := MapGRPCTLSModeToAPI(mode)
+		if err != nil {
+			t.Errorf("MapGRPCTLSModeToAPI(%q) error: %v", mode, err)
+			continue
+		}
+		back := MapGRPCTLSModeFromAPI(api)
+		if back != mode {
+			t.Errorf("roundtrip %q -> %q -> %q", mode, api, back)
+		}
+	}
+}
+
 func TestMapMonitorStatusFromAPI(t *testing.T) {
 	tests := []struct {
 		input    monitorv1.MonitorStatus
@@ -221,6 +235,15 @@ func TestEnumMapsCoverEveryGeneratedValue(t *testing.T) {
 		}
 		if _, ok := monitorStatusFromAPI[st]; !ok {
 			t.Errorf("generated monitor status %s is not mapped to a Terraform value", name)
+		}
+	}
+	for value, name := range monitorv1.GRPCTlsMode_name {
+		m := monitorv1.GRPCTlsMode(value)
+		if m == monitorv1.GRPCTlsMode_GRPC_TLS_MODE_UNSPECIFIED {
+			continue
+		}
+		if _, ok := grpcTLSModeFromAPI[m]; !ok {
+			t.Errorf("generated gRPC TLS mode %s is not mapped to a Terraform value", name)
 		}
 	}
 }
