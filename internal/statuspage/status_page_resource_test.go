@@ -240,6 +240,7 @@ func TestLocaleRoundTrip(t *testing.T) {
 		"en": statuspagev1.Locale_LOCALE_EN,
 		"fr": statuspagev1.Locale_LOCALE_FR,
 		"de": statuspagev1.Locale_LOCALE_DE,
+		"ja": statuspagev1.Locale_LOCALE_JA,
 	}
 	for tf, proto := range cases {
 		if got := localeToProto(tf); got != proto {

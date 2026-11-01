@@ -171,15 +171,15 @@ func (r *statusPageResource) Schema(_ context.Context, _ resource.SchemaRequest,
 				Optional:   true,
 				Computed:   true,
 				Default:    stringdefault.StaticString("en"),
-				Validators: []validator.String{stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr")},
+				Validators: []validator.String{stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr", "ja")},
 			},
 			"locales": schema.ListAttribute{
 				Optional:    true,
 				ElementType: types.StringType,
-				MarkdownDescription: "Locales the status page is available in, in display order. One of: `en`, `fr`, `de`. " +
+				MarkdownDescription: "Locales the status page is available in, in display order. One of: `en`, `fr`, `de`, `hi`, `ko`, `tr`, `ja`. " +
 					"Each locale may only be listed once; the API stores locales as a set and would silently drop duplicates.",
 				Validators: []validator.List{
-					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr")),
+					listvalidator.ValueStringsAre(stringvalidator.OneOf("en", "fr", "de", "hi", "ko", "tr", "ja")),
 					listvalidator.UniqueValues(),
 				},
 			},
@@ -571,6 +571,8 @@ func localeToProto(tf string) statuspagev1.Locale {
 		return statuspagev1.Locale_LOCALE_KO
 	case "tr":
 		return statuspagev1.Locale_LOCALE_TR
+	case "ja":
+		return statuspagev1.Locale_LOCALE_JA
 	}
 	return statuspagev1.Locale_LOCALE_UNSPECIFIED
 }
@@ -589,6 +591,8 @@ func localeFromProto(proto statuspagev1.Locale) (string, bool) {
 		return "ko", true
 	case statuspagev1.Locale_LOCALE_TR:
 		return "tr", true
+	case statuspagev1.Locale_LOCALE_JA:
+		return "ja", true
 	}
 	return "", false
 }
