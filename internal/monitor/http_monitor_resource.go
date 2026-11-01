@@ -75,11 +75,6 @@ func (r *httpMonitorResource) Configure(_ context.Context, req resource.Configur
 	r.client = req.ProviderData.(providerConfig).Client
 }
 
-var headerObjTypes = map[string]attr.Type{
-	"key":   types.StringType,
-	"value": types.StringType,
-}
-
 var statusCodeAssertionObjTypes = map[string]attr.Type{
 	"target":     types.Int64Type,
 	"comparator": types.StringType,
@@ -196,16 +191,7 @@ func (r *httpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest
 			},
 		},
 		Blocks: map[string]schema.Block{
-			"headers": schema.ListNestedBlock{
-				MarkdownDescription: "Custom HTTP headers.",
-				Validators:          []validator.List{listvalidator.SizeAtMost(20)},
-				NestedObject: schema.NestedBlockObject{
-					Attributes: map[string]schema.Attribute{
-						"key":   schema.StringAttribute{Required: true},
-						"value": schema.StringAttribute{Required: true},
-					},
-				},
-			},
+			"headers": headersSchemaBlock("Custom HTTP headers."),
 			"status_code_assertions": schema.ListNestedBlock{
 				MarkdownDescription: "Status code assertions.",
 				Validators:          []validator.List{listvalidator.SizeAtMost(10)},
@@ -395,20 +381,8 @@ func httpModelToAPI(ctx context.Context, data httpMonitorModel) (*monitorv1.HTTP
 		}
 	}
 
-	var headers []*monitorv1.Headers
-	if !data.Headers.IsNull() && !data.Headers.IsUnknown() {
-		var tfHeaders []struct {
-			Key   string `tfsdk:"key"`
-			Value string `tfsdk:"value"`
-		}
-		diags.Append(data.Headers.ElementsAs(ctx, &tfHeaders, false)...)
-		for _, h := range tfHeaders {
-			header := &monitorv1.Headers{}
-			header.SetKey(h.Key)
-			header.SetValue(h.Value)
-			headers = append(headers, header)
-		}
-	}
+	headers, headerDiags := headersToAPI(ctx, data.Headers)
+	diags.Append(headerDiags...)
 
 	var statusCodeAssertions []*monitorv1.StatusCodeAssertion
 	if !data.StatusCodeAssertions.IsNull() && !data.StatusCodeAssertions.IsUnknown() {
@@ -538,21 +512,7 @@ func httpAPIToModel(ctx context.Context, api *monitorv1.HTTPMonitor, data *httpM
 		data.Regions = types.SetNull(types.StringType)
 	}
 
-	// API returns `headers: [{}]` as a placeholder when no headers are
-	// configured. Drop empty entries so block count matches the plan (#19).
-	headerObjs := make([]attr.Value, 0, len(api.GetHeaders()))
-	for _, h := range api.GetHeaders() {
-		if h.GetKey() == "" && h.GetValue() == "" {
-			continue
-		}
-		obj, d := types.ObjectValue(headerObjTypes, map[string]attr.Value{
-			"key":   types.StringValue(h.GetKey()),
-			"value": types.StringValue(h.GetValue()),
-		})
-		diags.Append(d...)
-		headerObjs = append(headerObjs, obj)
-	}
-	headerList, d := types.ListValue(types.ObjectType{AttrTypes: headerObjTypes}, headerObjs)
+	headerList, d := headersFromAPI(api.GetHeaders())
 	diags.Append(d...)
 	data.Headers = headerList
 

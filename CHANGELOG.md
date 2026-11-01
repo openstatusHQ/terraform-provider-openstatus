@@ -1,5 +1,17 @@
 # Changelog
 
+## v0.5.0
+
+### Added
+
+- **`openstatus_grpc_monitor`** (resource) — gRPC health checks (`grpc.health.v1.Health/Check`) against a `host:port` target. Mirrors the other monitor resources (`name`, `uri`, `periodicity`, `timeout`, `degraded_at`, `retry`, `active`, `public`, `description`, `regions`, `open_telemetry`, `private_location_ids`) and adds `service`, `tls_mode` (`tls`, `plaintext`, `tls_insecure`; defaults to `tls`) and `metadata` blocks. Surfaced in the `openstatus_monitor` and `openstatus_monitors` data sources with `type = "grpc"`.
+- `ja` locale for `openstatus_status_page` `default_locale` and `locales`.
+
+### Changed
+
+- `openstatus_http_monitor` `headers[].value` is now marked sensitive and redacted from plan output, matching `openstatus_grpc_monitor` `metadata[].value`.
+- Bumped the OpenStatus API SDK and `connectrpc.com/connect` to v1.21.0.
+
 ## v0.4.0
 
 ### Added

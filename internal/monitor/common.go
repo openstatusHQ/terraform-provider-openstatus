@@ -115,6 +115,16 @@ var RecordComparatorValues = keys(recordComparatorToAPI)
 
 var DNSRecordTypes = []string{"A", "AAAA", "CNAME", "MX", "TXT"}
 
+var grpcTLSModeToAPI = map[string]monitorv1.GRPCTlsMode{
+	"tls":          monitorv1.GRPCTlsMode_GRPC_TLS_MODE_TLS,
+	"plaintext":    monitorv1.GRPCTlsMode_GRPC_TLS_MODE_PLAINTEXT,
+	"tls_insecure": monitorv1.GRPCTlsMode_GRPC_TLS_MODE_TLS_INSECURE,
+}
+
+var grpcTLSModeFromAPI = reverseMap(grpcTLSModeToAPI)
+
+var GRPCTLSModeValues = keys(grpcTLSModeToAPI)
+
 var monitorStatusFromAPI = map[monitorv1.MonitorStatus]string{
 	monitorv1.MonitorStatus_MONITOR_STATUS_ACTIVE:   "active",
 	monitorv1.MonitorStatus_MONITOR_STATUS_DEGRADED: "degraded",
@@ -193,6 +203,17 @@ func MapRecordComparatorToAPI(v string) (monitorv1.RecordComparator, error) {
 
 func MapRecordComparatorFromAPI(v monitorv1.RecordComparator) string {
 	if s, ok := recordComparatorFromAPI[v]; ok {
+		return s
+	}
+	return v.String()
+}
+
+func MapGRPCTLSModeToAPI(v string) (monitorv1.GRPCTlsMode, error) {
+	return lookupOrError(grpcTLSModeToAPI, v, "tls_mode")
+}
+
+func MapGRPCTLSModeFromAPI(v monitorv1.GRPCTlsMode) string {
+	if s, ok := grpcTLSModeFromAPI[v]; ok {
 		return s
 	}
 	return v.String()
