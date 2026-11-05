@@ -2,10 +2,10 @@ buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-202512091757
 buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go v1.36.12-20251209175733-2a1774d88802.2/go.mod h1:TCt1lluMFnctISJXvkIQ4x3ABrPuUKCWKyjKdkJNBpw=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.12-20230414000709-087bc8072ce4.2 h1:ZXEI+qE54FRhRcNAJOpvwU6CLLTgF4Etr87l3qECkcI=
 buf.build/gen/go/gnostic/gnostic/protocolbuffers/go v1.36.12-20230414000709-087bc8072ce4.2/go.mod h1:Y6uGzulgNTMSJafTYzhV2xKPPiUnSoE1AStyVM9mBbI=
-buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261020084701-b26c74b3aeed.1 h1:/tyQz/sVxfkHFVKPvzulRezvChzQn8yoQOCWAKBgh04=
-buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261020084701-b26c74b3aeed.1/go.mod h1:ZjS2yg2aeEO8+XcPcs7r/K9EshIUrUiQE7wifZlUQ20=
-buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261020084701-b26c74b3aeed.2 h1:yJ5RliPUJ4Gm+QJPDXDNFlpBwEfT3a7ZIndEjkjzFhA=
-buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261020084701-b26c74b3aeed.2/go.mod h1:xoGfyLPYG1IeO8lINiEfzsnXUBtEs413IRBzyg2kaNg=
+buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261105102303-642dc65c5c80.1 h1:FxmZZMOfU10EAgwNnCnzFX+wsx/c6GfC0hFe1oSM+Rs=
+buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261105102303-642dc65c5c80.1/go.mod h1:XQRYqu7KU9NQ01sc26GmQUfwU4+tdNmFpxUhGEWg9jY=
+buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261105102303-642dc65c5c80.2 h1:1bk3jJZdoTfFhH9w2GiGoJY7n49D6tu9/1DXroWg52Q=
+buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261105102303-642dc65c5c80.2/go.mod h1:xoGfyLPYG1IeO8lINiEfzsnXUBtEs413IRBzyg2kaNg=
 connectrpc.com/connect v1.21.0 h1:LhqSJt7jHf5NJBo9Jq/t/9FjcYAideif0mg+qe2jCUs=
 connectrpc.com/connect v1.21.0/go.mod h1:A2ygJrukXwWy32vkCAAHNVguZrqZ+jeZ9rGRnGR4dN4=
 dario.cat/mergo v1.0.0 h1:AGCNq9Evsj31mOgNPcLyXc+4PNABt905YmuqPYYpBWk=

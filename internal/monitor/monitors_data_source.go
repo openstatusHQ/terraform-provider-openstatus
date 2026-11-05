@@ -155,6 +155,17 @@ func (d *monitorsDataSource) Read(ctx context.Context, req datasource.ReadReques
 		resp.Diagnostics.Append(diags...)
 		objs = append(objs, obj)
 	}
+	// Heartbeat monitors are pinged by the job, so no location ever runs them.
+	for _, m := range apiResp.Msg.GetHeartbeatMonitors() {
+		obj, diags := types.ObjectValue(monitorSummaryObjTypes, map[string]attr.Value{
+			"id":                   types.StringValue(m.GetId()),
+			"name":                 types.StringValue(m.GetName()),
+			"type":                 types.StringValue("heartbeat"),
+			"private_location_ids": privateLocationSet(ctx, nil, &resp.Diagnostics),
+		})
+		resp.Diagnostics.Append(diags...)
+		objs = append(objs, obj)
+	}
 
 	monitorList, diags := types.ListValue(types.ObjectType{AttrTypes: monitorSummaryObjTypes}, objs)
 	resp.Diagnostics.Append(diags...)

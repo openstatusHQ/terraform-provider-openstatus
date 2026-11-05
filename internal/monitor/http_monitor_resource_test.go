@@ -208,7 +208,7 @@ func TestMonitorConfigOneof(t *testing.T) {
 	if config.GetHttp() == nil {
 		t.Fatal("expected the http arm to be set")
 	}
-	if config.GetTcp() != nil || config.GetDns() != nil || config.GetIcmp() != nil || config.GetGrpc() != nil {
+	if config.GetTcp() != nil || config.GetDns() != nil || config.GetIcmp() != nil || config.GetGrpc() != nil || config.GetHeartbeat() != nil {
 		t.Error("only one arm of the oneof may be set")
 	}
 	if config.GetHttp().GetName() != "Hub UI" {

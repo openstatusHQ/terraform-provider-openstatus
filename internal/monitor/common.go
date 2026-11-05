@@ -125,6 +125,11 @@ var grpcTLSModeFromAPI = reverseMap(grpcTLSModeToAPI)
 
 var GRPCTLSModeValues = keys(grpcTLSModeToAPI)
 
+var heartbeatPingKindFromAPI = map[monitorv1.HeartbeatPingKind]string{
+	monitorv1.HeartbeatPingKind_HEARTBEAT_PING_KIND_SUCCESS: "success",
+	monitorv1.HeartbeatPingKind_HEARTBEAT_PING_KIND_FAIL:    "fail",
+}
+
 var monitorStatusFromAPI = map[monitorv1.MonitorStatus]string{
 	monitorv1.MonitorStatus_MONITOR_STATUS_ACTIVE:   "active",
 	monitorv1.MonitorStatus_MONITOR_STATUS_DEGRADED: "degraded",

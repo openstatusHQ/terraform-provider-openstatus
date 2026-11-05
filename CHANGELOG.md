@@ -1,5 +1,16 @@
 # Changelog
 
+## v0.6.0
+
+### Added
+
+- **`openstatus_heartbeat_monitor`** (resource) — monitors jobs that run on their own schedule, such as cron jobs and backups. The job requests the sensitive, read-only `ping_url` each time it runs, and the monitor goes down when a ping is late or the job reports a failure. Configured with `name`, `period` and `grace` (both in seconds), `active`, `public` and `description`. Heartbeat monitors are being rolled out gradually, so creating one may fail until they are enabled for your workspace.
+- Heartbeat monitors are surfaced in the `openstatus_monitor` and `openstatus_monitors` data sources with `type = "heartbeat"`. `openstatus_monitor` gains `period`, `grace`, `ping_url` (sensitive), `last_ping_at` and `last_ping_kind`. Status and last ping are available on the data source rather than the resource, so a ping doesn't make every `terraform plan` report out-of-band drift.
+
+### Changed
+
+- Bumped the OpenStatus API SDK.
+
 ## v0.5.0
 
 ### Added

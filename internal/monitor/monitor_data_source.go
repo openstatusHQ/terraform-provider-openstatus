@@ -41,6 +41,11 @@ type monitorDataSourceModel struct {
 	Timeout            types.Int64  `tfsdk:"timeout"`
 	Status             types.String `tfsdk:"status"`
 	PrivateLocationIDs types.Set    `tfsdk:"private_location_ids"`
+	Period             types.Int64  `tfsdk:"period"`
+	Grace              types.Int64  `tfsdk:"grace"`
+	PingURL            types.String `tfsdk:"ping_url"`
+	LastPingAt         types.String `tfsdk:"last_ping_at"`
+	LastPingKind       types.String `tfsdk:"last_ping_kind"`
 }
 
 func (d *monitorDataSource) Metadata(_ context.Context, req datasource.MetadataRequest, resp *datasource.MetadataResponse) {
@@ -74,6 +79,27 @@ func (d *monitorDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 				Computed:            true,
 				ElementType:         types.StringType,
 				MarkdownDescription: "IDs of the private locations that run this monitor.",
+			},
+			"period": schema.Int64Attribute{
+				Computed:            true,
+				MarkdownDescription: "Expected time between pings, in seconds. Only set for heartbeat monitors.",
+			},
+			"grace": schema.Int64Attribute{
+				Computed:            true,
+				MarkdownDescription: "Extra time after `period` before a late ping counts as missed, in seconds. Only set for heartbeat monitors.",
+			},
+			"ping_url": schema.StringAttribute{
+				Computed:            true,
+				Sensitive:           true,
+				MarkdownDescription: "URL the job requests each time it runs. Only set for heartbeat monitors.",
+			},
+			"last_ping_at": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "Time of the last ping in ISO 8601. Only set for heartbeat monitors that have received a ping.",
+			},
+			"last_ping_kind": schema.StringAttribute{
+				Computed:            true,
+				MarkdownDescription: "What the last ping reported, `success` or `fail`. Only set for heartbeat monitors that have received a ping.",
 			},
 		},
 	}
@@ -160,6 +186,25 @@ func (d *monitorDataSource) Read(ctx context.Context, req datasource.ReadRequest
 		data.Public = types.BoolValue(m.GetPublic())
 		data.Description = types.StringValue(m.GetDescription())
 		data.Timeout = types.Int64Value(m.GetTimeout())
+		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
+			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
+		}
+	case config.GetHeartbeat() != nil:
+		m := config.GetHeartbeat()
+		data.Type = types.StringValue("heartbeat")
+		data.Name = types.StringValue(m.GetName())
+		data.Active = types.BoolValue(m.GetActive())
+		data.Public = types.BoolValue(m.GetPublic())
+		data.Description = types.StringValue(m.GetDescription())
+		data.Period = types.Int64Value(m.GetPeriod())
+		data.Grace = types.Int64Value(m.GetGrace())
+		data.PingURL = types.StringValue(m.GetPingUrl())
+		if m.HasLastPingAt() {
+			data.LastPingAt = types.StringValue(m.GetLastPingAt())
+		}
+		if kind, ok := heartbeatPingKindFromAPI[m.GetLastPingKind()]; ok {
+			data.LastPingKind = types.StringValue(kind)
+		}
 		if m.GetStatus() != monitorv1.MonitorStatus_MONITOR_STATUS_UNSPECIFIED {
 			data.Status = types.StringValue(MapMonitorStatusFromAPI(m.GetStatus()))
 		}

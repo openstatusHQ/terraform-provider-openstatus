@@ -29,10 +29,15 @@ output "monitor_name" {
 
 - `active` (Boolean)
 - `description` (String)
+- `grace` (Number) Extra time after `period` before a late ping counts as missed, in seconds. Only set for heartbeat monitors.
 - `id` (String) The ID of this resource.
+- `last_ping_at` (String) Time of the last ping in ISO 8601. Only set for heartbeat monitors that have received a ping.
+- `last_ping_kind` (String) What the last ping reported, `success` or `fail`. Only set for heartbeat monitors that have received a ping.
 - `method` (String)
 - `name` (String)
+- `period` (Number) Expected time between pings, in seconds. Only set for heartbeat monitors.
 - `periodicity` (String)
+- `ping_url` (String, Sensitive) URL the job requests each time it runs. Only set for heartbeat monitors.
 - `private_location_ids` (Set of String) IDs of the private locations that run this monitor.
 - `public` (Boolean)
 - `status` (String)
