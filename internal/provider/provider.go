@@ -99,6 +99,7 @@ func (p *openstatusProvider) Resources(_ context.Context) []func() resource.Reso
 		monitor.NewDNSMonitorResource,
 		monitor.NewICMPMonitorResource,
 		monitor.NewGRPCMonitorResource,
+		monitor.NewHeartbeatMonitorResource,
 		notification.NewNotificationResource,
 		statuspage.NewStatusPageResource,
 		statuspage.NewComponentResource,
