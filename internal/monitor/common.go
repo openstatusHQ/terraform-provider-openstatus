@@ -24,7 +24,6 @@ var PeriodicityValues = keys(periodicityToAPI)
 var regionToAPI = map[string]monitorv1.Region{
 	"fly-ams":                 monitorv1.Region_REGION_FLY_AMS,
 	"fly-arn":                 monitorv1.Region_REGION_FLY_ARN,
-	"fly-bom":                 monitorv1.Region_REGION_FLY_BOM,
 	"fly-cdg":                 monitorv1.Region_REGION_FLY_CDG,
 	"fly-dfw":                 monitorv1.Region_REGION_FLY_DFW,
 	"fly-ewr":                 monitorv1.Region_REGION_FLY_EWR,
@@ -52,9 +51,17 @@ var regionToAPI = map[string]monitorv1.Region{
 	"railway-asia-southeast1": monitorv1.Region_REGION_RAILWAY_ASIA_SOUTHEAST1,
 }
 
-var regionFromAPI = reverseMap(regionToAPI)
+var regionFromAPI = withDeprecatedRegions(reverseMap(regionToAPI))
 
 var RegionValues = keys(regionToAPI)
+
+// withDeprecatedRegions adds the regions the API rejects on create and update
+// but can still return for an existing monitor. They stay readable, so Terraform
+// shows the region it is about to replace instead of silently dropping it.
+func withDeprecatedRegions(m map[monitorv1.Region]string) map[monitorv1.Region]string {
+	m[monitorv1.Region_REGION_FLY_BOM] = "fly-bom" //nolint:staticcheck // deliberately read-only
+	return m
+}
 
 var methodToAPI = map[string]monitorv1.HTTPMethod{
 	"GET":     monitorv1.HTTPMethod_HTTP_METHOD_GET,

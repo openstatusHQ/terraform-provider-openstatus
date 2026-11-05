@@ -1,6 +1,7 @@
 package monitor
 
 import (
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -57,6 +58,21 @@ func TestMapRegionsToAPI_InvalidReturnsError(t *testing.T) {
 	}
 	if !strings.Contains(err.Error(), `unknown region: "railway-europe-ewlrljw"`) {
 		t.Errorf("unexpected error message: %v", err)
+	}
+}
+
+// The API rejects fly-bom on create and update, but can still return it for an
+// existing monitor.
+func TestDeprecatedRegionIsReadOnly(t *testing.T) {
+	if slices.Contains(RegionValues, "fly-bom") {
+		t.Error("fly-bom must not be an accepted region")
+	}
+	if _, err := MapRegionsToAPI([]string{"fly-bom"}); err == nil {
+		t.Error("expected error when sending fly-bom, got nil")
+	}
+	got := MapRegionsFromAPI([]monitorv1.Region{monitorv1.Region_REGION_FLY_BOM}) //nolint:staticcheck // deliberately read-only
+	if len(got) != 1 || got[0] != "fly-bom" {
+		t.Errorf("MapRegionsFromAPI = %v, want [fly-bom]", got)
 	}
 }
 

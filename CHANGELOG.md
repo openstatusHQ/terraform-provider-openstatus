@@ -10,6 +10,7 @@
 ### Changed
 
 - Bumped the OpenStatus API SDK.
+- **`fly-bom` is no longer accepted in `regions`** and now fails at `terraform plan`. The API already rejected it on every create and update, so a monitor using it could not be changed at all. Replace it with `fly-sin`, the region OpenStatus recommends instead.
 
 ## v0.5.0
 
