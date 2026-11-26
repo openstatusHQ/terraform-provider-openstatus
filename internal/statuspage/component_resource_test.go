@@ -142,3 +142,39 @@ func TestComponentAPIToModel_MapsType(t *testing.T) {
 		t.Errorf("Type = %q, want static", staticData.Type.ValueString())
 	}
 }
+
+func TestComponentAPIToModel_MapsPublic(t *testing.T) {
+	public := monitorComponent(1, 1)
+	public.SetPublic(true)
+	var data componentModel
+	componentAPIToModel(public, &data)
+	if !data.Public.ValueBool() {
+		t.Errorf("Public = %v, want true", data.Public)
+	}
+
+	// protojson omits a false bool: an absent field must overwrite a stale true
+	// (and resolve an unknown), not be kept like order/group_order.
+	data.Public = types.BoolValue(true)
+	componentAPIToModel(monitorComponent(1, 1), &data)
+	if data.Public.IsNull() || data.Public.IsUnknown() || data.Public.ValueBool() {
+		t.Errorf("Public = %v, want false", data.Public)
+	}
+
+	data.Public = types.BoolUnknown()
+	componentAPIToModel(monitorComponent(1, 1), &data)
+	if data.Public.IsUnknown() || data.Public.ValueBool() {
+		t.Errorf("Public = %v, want known false", data.Public)
+	}
+}
+
+func TestUpdateComponentRequest_PublicFalseIsPresent(t *testing.T) {
+	req := &statuspagev1.UpdateComponentRequest{}
+	req.SetId("abc")
+	if req.HasPublic() {
+		t.Fatal("public must be absent when not set, otherwise update clobbers it")
+	}
+	req.SetPublic(false)
+	if !req.HasPublic() {
+		t.Error("public = false must still be sent, or it can never be turned off")
+	}
+}

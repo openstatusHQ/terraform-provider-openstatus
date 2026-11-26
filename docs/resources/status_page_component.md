@@ -19,6 +19,7 @@ resource "openstatus_status_page_component" "api_monitor" {
   monitor_id = openstatus_http_monitor.api.id
   name       = "API"
   order      = 1
+  public     = true # show the monitor's latency and uptime on this page
 }
 
 resource "openstatus_status_page_component" "info" {
@@ -45,6 +46,7 @@ resource "openstatus_status_page_component" "info" {
 - `monitor_id` (String) Required when type is `monitor`.
 - `name` (String)
 - `order` (Number) Display order of the component's group on the status page.
+- `public` (Boolean) Whether the monitor's stats (latency, uptime) are shown on this status page. Only valid for `type = "monitor"`; heartbeat monitors cannot be public. New components default to `false`; when unset, the current value is left unchanged.
 
 ### Read-Only
 

@@ -663,6 +663,12 @@ func (s *statusPageService) AddMonitorComponent(_ context.Context, req *connect.
 	c.SetOrder(m.GetOrder())
 	c.SetGroupId(m.GetGroupId())
 	c.SetType(statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_MONITOR)
+	if m.GetPublic() {
+		if _, isHeartbeat := s.f.heartbeats[m.GetMonitorId()]; isHeartbeat {
+			return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("heartbeat monitors cannot be public"))
+		}
+		c.SetPublic(true)
+	}
 	c.SetCreatedAt(fixedTimestamp)
 	c.SetUpdatedAt(fixedTimestamp)
 	s.f.components[c.GetId()] = c
@@ -717,6 +723,18 @@ func (s *statusPageService) UpdateComponent(_ context.Context, req *connect.Requ
 	}
 	if m.HasGroupOrder() {
 		c.SetGroupOrder(m.GetGroupOrder())
+	}
+	if m.HasPublic() {
+		// Mirrors the API: only monitor components, and never heartbeats.
+		if m.GetPublic() {
+			if c.GetType() != statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_MONITOR {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("only monitor components can be public"))
+			}
+			if _, isHeartbeat := s.f.heartbeats[c.GetMonitorId()]; isHeartbeat {
+				return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("heartbeat monitors cannot be public"))
+			}
+		}
+		c.SetPublic(m.GetPublic())
 	}
 
 	resp := &statuspagev1.UpdateComponentResponse{}

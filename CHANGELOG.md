@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`public` on `openstatus_status_page_component`.** Controls whether a monitor's stats (latency, uptime) are shown on that status page, so the same monitor can be public on one page and private on another. Only valid for `type = "monitor"`: `public = true` on a static component fails at `terraform plan`, and the API rejects it for heartbeat monitors. New components default to `false`. When `public` is left unset, the provider keeps whatever the server has instead of forcing `false`.
+
+### Deprecated
+
+- **`public` on all monitor resources** (`openstatus_http_monitor`, `openstatus_tcp_monitor`, `openstatus_dns_monitor`, `openstatus_icmp_monitor`, `openstatus_grpc_monitor`, `openstatus_heartbeat_monitor`) and on the `openstatus_monitor` data source. The OpenStatus API no longer reads it, so setting it has no effect. OpenStatus copied each monitor's old value onto its existing status page components (heartbeat monitors stay private), so live pages keep their visibility. To manage visibility from Terraform, move `public = true` from the monitor to each `openstatus_status_page_component`. The attribute will be removed in a future major release.
+
 ## v0.6.0
 
 ### Added

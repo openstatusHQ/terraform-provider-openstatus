@@ -71,7 +71,7 @@ func (d *monitorDataSource) Schema(_ context.Context, _ datasource.SchemaRequest
 			"periodicity": schema.StringAttribute{Computed: true},
 			"method":      schema.StringAttribute{Computed: true},
 			"active":      schema.BoolAttribute{Computed: true},
-			"public":      schema.BoolAttribute{Computed: true},
+			"public":      schema.BoolAttribute{Computed: true, MarkdownDescription: "Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`."},
 			"description": schema.StringAttribute{Computed: true},
 			"timeout":     schema.Int64Attribute{Computed: true},
 			"status":      schema.StringAttribute{Computed: true},

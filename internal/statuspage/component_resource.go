@@ -14,6 +14,7 @@ import (
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/boolplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
@@ -21,9 +22,10 @@ import (
 )
 
 var (
-	_ resource.Resource                = (*componentResource)(nil)
-	_ resource.ResourceWithConfigure   = (*componentResource)(nil)
-	_ resource.ResourceWithImportState = (*componentResource)(nil)
+	_ resource.Resource                   = (*componentResource)(nil)
+	_ resource.ResourceWithConfigure      = (*componentResource)(nil)
+	_ resource.ResourceWithImportState    = (*componentResource)(nil)
+	_ resource.ResourceWithValidateConfig = (*componentResource)(nil)
 )
 
 func NewComponentResource() resource.Resource {
@@ -44,6 +46,7 @@ type componentModel struct {
 	Order       types.Int64  `tfsdk:"order"`
 	GroupID     types.String `tfsdk:"group_id"`
 	GroupOrder  types.Int64  `tfsdk:"group_order"`
+	Public      types.Bool   `tfsdk:"public"`
 	CreatedAt   types.String `tfsdk:"created_at"`
 	UpdatedAt   types.String `tfsdk:"updated_at"`
 }
@@ -101,9 +104,41 @@ func (r *componentResource) Schema(_ context.Context, _ resource.SchemaRequest, 
 				Computed:            true,
 				MarkdownDescription: "Display order of the component within its group.",
 			},
+			// No plan-time default: the API migration copied the old monitor-level
+			// `public` onto existing components, so defaulting to false would
+			// plan true -> false for every component that doesn't set it and
+			// silently hide stats. Unset keeps the server value; new
+			// components come back false.
+			"public": schema.BoolAttribute{
+				Optional:            true,
+				Computed:            true,
+				PlanModifiers:       []planmodifier.Bool{boolplanmodifier.UseStateForUnknown()},
+				MarkdownDescription: "Whether the monitor's stats (latency, uptime) are shown on this status page. Only valid for `type = \"monitor\"`; heartbeat monitors cannot be public. New components default to `false`; when unset, the current value is left unchanged.",
+			},
 			"created_at": schema.StringAttribute{Computed: true},
 			"updated_at": schema.StringAttribute{Computed: true},
 		},
+	}
+}
+
+// ValidateConfig rejects `public = true` on static components at plan time;
+// the API would only refuse it mid-apply. Heartbeat monitors can't be caught
+// here (monitor_id is an opaque string), so that stays a server-side error.
+func (r *componentResource) ValidateConfig(ctx context.Context, req resource.ValidateConfigRequest, resp *resource.ValidateConfigResponse) {
+	var data componentModel
+	resp.Diagnostics.Append(req.Config.Get(ctx, &data)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
+	if data.Type.IsUnknown() || data.Type.ValueString() != "static" {
+		return
+	}
+	if !data.Public.IsNull() && !data.Public.IsUnknown() && data.Public.ValueBool() {
+		resp.Diagnostics.AddAttributeError(
+			path.Root("public"),
+			"Static components cannot be public",
+			"`public` shows a monitor's stats on the status page and is only valid when `type = \"monitor\"`.",
+		)
 	}
 }
 
@@ -126,6 +161,9 @@ func (r *componentResource) Create(ctx context.Context, req resource.CreateReque
 		apiReq.SetGroupId(data.GroupID.ValueString())
 		if !data.Order.IsNull() && !data.Order.IsUnknown() {
 			apiReq.SetOrder(int32(data.Order.ValueInt64()))
+		}
+		if !data.Public.IsNull() && !data.Public.IsUnknown() {
+			apiReq.SetPublic(data.Public.ValueBool())
 		}
 		var apiResp *connect.Response[statuspagev1.AddMonitorComponentResponse]
 		apiResp, err = r.client.StatusPage.AddMonitorComponent(ctx, connect.NewRequest(apiReq))
@@ -246,6 +284,9 @@ func (r *componentResource) Update(ctx context.Context, req resource.UpdateReque
 	if !data.GroupOrder.IsNull() && !data.GroupOrder.IsUnknown() {
 		updateReq.SetGroupOrder(int32(data.GroupOrder.ValueInt64()))
 	}
+	if !data.Public.IsNull() && !data.Public.IsUnknown() {
+		updateReq.SetPublic(data.Public.ValueBool())
+	}
 
 	apiResp, err := r.client.StatusPage.UpdateComponent(ctx, connect.NewRequest(updateReq))
 	if err != nil {
@@ -328,6 +369,9 @@ func componentAPIToModel(api *statuspagev1.PageComponent, data *componentModel) 
 	if api.GetMonitorId() != "" {
 		data.MonitorID = types.StringValue(api.GetMonitorId())
 	}
+
+	// proto3 omits a false bool, so GetPublic's zero value is authoritative.
+	data.Public = types.BoolValue(api.GetPublic())
 
 	switch api.GetType() {
 	case statuspagev1.PageComponentType_PAGE_COMPONENT_TYPE_MONITOR:

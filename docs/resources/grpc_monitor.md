@@ -45,7 +45,7 @@ resource "openstatus_grpc_monitor" "api" {
 - `description` (String)
 - `metadata` (Block List) Metadata sent with the health check request. (see [below for nested schema](#nestedblock--metadata))
 - `open_telemetry` (Block, Optional) OpenTelemetry exporter configuration. (see [below for nested schema](#nestedblock--open_telemetry))
-- `public` (Boolean)
+- `public` (Boolean, Deprecated) Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.
 - `regions` (Set of String) Regions to monitor from.
 - `retry` (Number)
 - `service` (String) Service name passed to `Health/Check`. Leave unset to check overall server health.
