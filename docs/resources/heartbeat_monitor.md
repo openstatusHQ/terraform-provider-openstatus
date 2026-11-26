@@ -45,7 +45,7 @@ output "nightly_backup_ping_url" {
 
 - `active` (Boolean) Whether the monitor is active. Pings to an inactive monitor are ignored and it sends no alerts. Defaults to `false`.
 - `description` (String)
-- `public` (Boolean)
+- `public` (Boolean, Deprecated) Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.
 
 ### Read-Only
 

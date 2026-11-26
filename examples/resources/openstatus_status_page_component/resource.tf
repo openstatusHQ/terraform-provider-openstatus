@@ -4,6 +4,7 @@ resource "openstatus_status_page_component" "api_monitor" {
   monitor_id = openstatus_http_monitor.api.id
   name       = "API"
   order      = 1
+  public     = true # show the monitor's latency and uptime on this page
 }
 
 resource "openstatus_status_page_component" "info" {

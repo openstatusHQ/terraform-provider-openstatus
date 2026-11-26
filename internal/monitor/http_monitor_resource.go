@@ -164,7 +164,8 @@ func (r *httpMonitorResource) Schema(_ context.Context, _ resource.SchemaRequest
 				Optional:            true,
 				Computed:            true,
 				Default:             booldefault.StaticBool(false),
-				MarkdownDescription: "Whether the monitor is publicly visible.",
+				MarkdownDescription: "Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.",
+				DeprecationMessage:  "`public` on monitors is deprecated and no longer read by the OpenStatus API. Set `public` on each `openstatus_status_page_component` instead.",
 			},
 			"description": schema.StringAttribute{
 				Optional:            true,

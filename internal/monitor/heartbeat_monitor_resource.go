@@ -97,9 +97,11 @@ func (r *heartbeatMonitorResource) Schema(_ context.Context, _ resource.SchemaRe
 				MarkdownDescription: "Whether the monitor is active. Pings to an inactive monitor are ignored and it sends no alerts. Defaults to `false`.",
 			},
 			"public": schema.BoolAttribute{
-				Optional: true,
-				Computed: true,
-				Default:  booldefault.StaticBool(false),
+				Optional:            true,
+				Computed:            true,
+				Default:             booldefault.StaticBool(false),
+				MarkdownDescription: "Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.",
+				DeprecationMessage:  "`public` on monitors is deprecated and no longer read by the OpenStatus API. Set `public` on each `openstatus_status_page_component` instead.",
 			},
 			"description": schema.StringAttribute{
 				Optional:   true,

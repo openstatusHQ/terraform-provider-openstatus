@@ -39,7 +39,7 @@ output "monitor_name" {
 - `periodicity` (String)
 - `ping_url` (String, Sensitive) URL the job requests each time it runs. Only set for heartbeat monitors.
 - `private_location_ids` (Set of String) IDs of the private locations that run this monitor.
-- `public` (Boolean)
+- `public` (Boolean) Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.
 - `status` (String)
 - `timeout` (Number)
 - `type` (String)

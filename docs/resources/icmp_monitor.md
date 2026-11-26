@@ -42,7 +42,7 @@ resource "openstatus_icmp_monitor" "gw" {
 - `degraded_at` (Number)
 - `description` (String)
 - `open_telemetry` (Block, Optional) OpenTelemetry exporter configuration. (see [below for nested schema](#nestedblock--open_telemetry))
-- `public` (Boolean)
+- `public` (Boolean, Deprecated) Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.
 - `regions` (Set of String) Regions to monitor from.
 - `retry` (Number)
 - `timeout` (Number)

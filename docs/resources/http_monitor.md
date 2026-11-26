@@ -69,7 +69,7 @@ resource "openstatus_http_monitor" "api" {
 - `headers` (Block List) Custom HTTP headers. (see [below for nested schema](#nestedblock--headers))
 - `method` (String) HTTP method.
 - `open_telemetry` (Block, Optional) OpenTelemetry exporter configuration. (see [below for nested schema](#nestedblock--open_telemetry))
-- `public` (Boolean) Whether the monitor is publicly visible.
+- `public` (Boolean, Deprecated) Deprecated: no longer read by the OpenStatus API. Visibility is set per status page with `public` on `openstatus_status_page_component`.
 - `regions` (Set of String) Regions to monitor from.
 - `retry` (Number) Number of retries (0–10).
 - `status_code_assertions` (Block List) Status code assertions. (see [below for nested schema](#nestedblock--status_code_assertions))
