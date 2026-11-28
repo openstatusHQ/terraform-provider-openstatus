@@ -6,6 +6,7 @@ import (
 
 	monitorv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/monitor/v1/monitorv1connect"
 	notificationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/notification/v1/notificationv1connect"
+	playbookv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/playbook/v1/playbookv1connect"
 	privatelocationv1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/private_location/v1/private_locationv1connect"
 	statuspagev1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/status_page/v1/status_pagev1connect"
 
@@ -31,6 +32,7 @@ type Client struct {
 	Notification    notificationv1connect.NotificationServiceClient
 	StatusPage      statuspagev1connect.StatusPageServiceClient
 	PrivateLocation privatelocationv1connect.PrivateLocationServiceClient
+	Playbook        playbookv1connect.PlaybookServiceClient
 }
 
 func authInterceptor(apiKey string) connect.UnaryInterceptorFunc {
@@ -57,5 +59,6 @@ func New(baseURL, apiKey string) *Client {
 		Notification:    notificationv1connect.NewNotificationServiceClient(httpClient, baseURL, opts...),
 		StatusPage:      statuspagev1connect.NewStatusPageServiceClient(httpClient, baseURL, opts...),
 		PrivateLocation: privatelocationv1connect.NewPrivateLocationServiceClient(httpClient, baseURL, opts...),
+		Playbook:        playbookv1connect.NewPlaybookServiceClient(httpClient, baseURL, opts...),
 	}
 }

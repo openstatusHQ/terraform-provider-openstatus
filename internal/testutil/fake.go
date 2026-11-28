@@ -13,6 +13,7 @@ import (
 	statuspagev1connect "buf.build/gen/go/openstatus/api/connectrpc/go/openstatus/status_page/v1/status_pagev1connect"
 	monitorv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/monitor/v1"
 	notificationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/notification/v1"
+	playbookv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/playbook/v1"
 	privatelocationv1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/private_location/v1"
 	statuspagev1 "buf.build/gen/go/openstatus/api/protocolbuffers/go/openstatus/status_page/v1"
 
@@ -38,6 +39,8 @@ type Fake struct {
 	components       map[string]*statuspagev1.PageComponent
 	groups           map[string]*statuspagev1.PageComponentGroup
 	privateLocations map[string]*privatelocationv1.PrivateLocation
+	playbooks        map[string]*playbookv1.Playbook
+	playbookOrder    []string
 }
 
 func NewFake() *Fake {
@@ -53,6 +56,7 @@ func NewFake() *Fake {
 		components:       map[string]*statuspagev1.PageComponent{},
 		groups:           map[string]*statuspagev1.PageComponentGroup{},
 		privateLocations: map[string]*privatelocationv1.PrivateLocation{},
+		playbooks:        map[string]*playbookv1.Playbook{},
 	}
 }
 

@@ -3,13 +3,14 @@ module terraform-provider-openstatus
 go 1.25.8
 
 require (
-	buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261126193326-55b9b7f306f6.1
-	buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261126193326-55b9b7f306f6.2
+	buf.build/gen/go/openstatus/api/connectrpc/go v1.21.0-20261128140431-75bfd810f37c.1
+	buf.build/gen/go/openstatus/api/protocolbuffers/go v1.36.12-20261128140431-75bfd810f37c.2
 	connectrpc.com/connect v1.21.0
 	github.com/hashicorp/terraform-plugin-framework v1.19.0
 	github.com/hashicorp/terraform-plugin-framework-validators v0.19.0
 	github.com/hashicorp/terraform-plugin-go v0.31.0
 	github.com/hashicorp/terraform-plugin-testing v1.16.0
+	google.golang.org/protobuf v1.36.12
 )
 
 require (
@@ -64,5 +65,4 @@ require (
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20251202230838-ff82c1b0f217 // indirect
 	google.golang.org/grpc v1.79.3 // indirect
-	google.golang.org/protobuf v1.36.12 // indirect
 )

@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+### Added
+
+- **`openstatus_playbook`** (resource): manages the markdown playbooks the OpenStatus agent follows when it runs incidents, writes status page updates, schedules maintenance or drafts postmortems. Configured with `slug`, `title`, `description`, `content` and `variables` (values for `{{name}}` placeholders in `content`), and imported by slug. Built-in slugs (`incident-response`, `status-page`, `maintenance-windows`, `postmortem`) default their title and description. If the workspace has already written a built-in, creating the resource fails with a hint to import it, so its content isn't overwritten. Destroying a built-in reverts it to the OpenStatus default. Custom slugs need a `title` and `description`. Variables that `content` doesn't reference, or that have empty values, fail at `terraform plan`, because the API would silently drop them. Leading and trailing whitespace is ignored, so heredocs work.
+- **`openstatus_playbook`** and **`openstatus_playbooks`** (data sources): fetch one playbook with its content, or list the workspace's playbooks.
+
+### Changed
+
+- Bumped the OpenStatus API SDK.
+
 ## v0.7.0
 
 ### Added
