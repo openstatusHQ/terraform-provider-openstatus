@@ -7,6 +7,7 @@ import (
 	"terraform-provider-openstatus/internal/client"
 	"terraform-provider-openstatus/internal/monitor"
 	"terraform-provider-openstatus/internal/notification"
+	"terraform-provider-openstatus/internal/playbook"
 	"terraform-provider-openstatus/internal/privatelocation"
 	"terraform-provider-openstatus/internal/statuspage"
 
@@ -34,7 +35,7 @@ type openstatusProviderModel struct {
 
 func (p *openstatusProvider) Schema(_ context.Context, _ provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "The OpenStatus provider allows you to manage monitors, status pages, notifications, and private locations.",
+		MarkdownDescription: "The OpenStatus provider allows you to manage monitors, status pages, notifications, private locations, and playbooks.",
 		Attributes: map[string]schema.Attribute{
 			"api_token": schema.StringAttribute{
 				MarkdownDescription: "OpenStatus API token. Can also be set via the `OPENSTATUS_API_TOKEN` environment variable.",
@@ -89,6 +90,8 @@ func (p *openstatusProvider) DataSources(_ context.Context) []func() datasource.
 		notification.NewNotificationDataSource,
 		privatelocation.NewPrivateLocationDataSource,
 		privatelocation.NewPrivateLocationsDataSource,
+		playbook.NewPlaybookDataSource,
+		playbook.NewPlaybooksDataSource,
 	}
 }
 
@@ -105,5 +108,6 @@ func (p *openstatusProvider) Resources(_ context.Context) []func() resource.Reso
 		statuspage.NewComponentResource,
 		statuspage.NewComponentGroupResource,
 		privatelocation.NewPrivateLocationResource,
+		playbook.NewPlaybookResource,
 	}
 }
